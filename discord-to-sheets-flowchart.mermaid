@@ -1,0 +1,84 @@
+flowchart TD
+    Start([Daily Timer Trigger<br/>08:00 PM]) --> CheckTime{Is it 08:00 PM?}
+    CheckTime -->|Yes| InitBot[Initialize Discord Bot]
+    CheckTime -->|No| Wait[Wait until next check]
+    Wait --> CheckTime
+    
+    InitBot --> ConnectDiscord[Connect to Discord API]
+    ConnectDiscord --> GetChannel[Get Target Channel]
+    
+    GetChannel --> FetchPosts[Fetch Posts from Last 24 Hours]
+    FetchPosts --> FilterPosts{Are there<br/>Twitter posts?}
+    
+    FilterPosts -->|No| LogEmpty[Log: No posts found]
+    FilterPosts -->|Yes| ProcessPosts[Process Each Post]
+    
+    ProcessPosts --> ExtractData[Extract Post Data:<br/>- Date & Time<br/>- Content<br/>- Post Link<br/>- Author Name<br/>- Author Profile Link]
+    
+    ExtractData --> FormatData[Format Data for Google Sheets:<br/>Structure into columns]
+    
+    FormatData --> InitSheets[Initialize Google Sheets API]
+    InitSheets --> AuthSheets[Authenticate with<br/>Google Sheets]
+    
+    AuthSheets --> OpenSheet[Open Target Spreadsheet]
+    OpenSheet --> SelectSheet[Select Target Sheet]
+    
+    SelectSheet --> CheckHeaders{Headers exist?}
+    CheckHeaders -->|No| CreateHeaders[Create Column Headers:<br/>Date, Time, Post Content,<br/>Post Link, Author, Author Link]
+    CheckHeaders -->|Yes| FindLastRow[Find Last Row with Data]
+    CreateHeaders --> FindLastRow
+    
+    FindLastRow --> AppendData[Append New Posts<br/>to Sheet]
+    
+    AppendData --> VerifyUpload{Upload<br/>Successful?}
+    VerifyUpload -->|Yes| LogSuccess[Log: Posts uploaded successfully]
+    VerifyUpload -->|No| LogError[Log: Upload failed<br/>Store for retry]
+    
+    LogSuccess --> Cleanup[Clean up connections]
+    LogError --> Cleanup
+    LogEmpty --> Cleanup
+    
+    Cleanup --> End([End Process])
+    
+    subgraph "Module 1: Scheduler"
+        Start
+        CheckTime
+        Wait
+    end
+    
+    subgraph "Module 2: Discord Handler"
+        InitBot
+        ConnectDiscord
+        GetChannel
+        FetchPosts
+        FilterPosts
+    end
+    
+    subgraph "Module 3: Data Processor"
+        ProcessPosts
+        ExtractData
+        FormatData
+    end
+    
+    subgraph "Module 4: Google Sheets Handler"
+        InitSheets
+        AuthSheets
+        OpenSheet
+        SelectSheet
+        CheckHeaders
+        CreateHeaders
+        FindLastRow
+        AppendData
+        VerifyUpload
+    end
+    
+    subgraph "Module 5: Logger"
+        LogEmpty
+        LogSuccess
+        LogError
+    end
+    
+    style Start fill:#90EE90
+    style End fill:#FFB6C1
+    style LogError fill:#FFA07A
+    style LogSuccess fill:#98FB98
