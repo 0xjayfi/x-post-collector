@@ -137,6 +137,37 @@ class DiscordHandler:
         match = self.TWITTER_URL_PATTERN.search(content)
         return match.group(0) if match else None
         
+    def clean_content(self, text: str) -> str:
+        """Clean content by fixing Discord markdown issues while preserving structure.
+        
+        Args:
+            text: Text to clean
+            
+        Returns:
+            Cleaned text with fixed markdown and preserved paragraph structure
+        """
+        # Fix zero-width characters in Discord markdown links
+        # Pattern: [@​username] -> [@username] (remove zero-width chars)
+        text = text.replace('\u200b', '').replace('​', '')
+        
+        # Fix Discord markdown links that have zero-width spaces
+        # This preserves the markdown format while removing invisible characters
+        username_pattern = re.compile(r'\[@\s*([^\]]+)\]')
+        text = username_pattern.sub(r'[@\1]', text)
+        
+        # Preserve paragraph structure - only clean up excessive spaces within lines
+        lines = text.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            # Clean up multiple spaces within a line (but preserve single spaces)
+            cleaned_line = re.sub(r'[ \t]+', ' ', line).strip()
+            cleaned_lines.append(cleaned_line)
+        
+        # Join back with newlines, removing empty lines at start/end but preserving internal structure
+        text = '\n'.join(cleaned_lines).strip()
+        
+        return text
+    
     def format_post_data(self, message: discord.Message) -> TwitterPost:
         """Convert Discord message to TwitterPost data structure.
         
@@ -150,7 +181,7 @@ class DiscordHandler:
         twitter_link = self.extract_twitter_link(message.content)
         
         # Extract content from embed if available (for TweetShift embeds)
-        content = message.content[:500]  # Default to message content
+        content = message.content[:1000]  # Default to message content (increased limit)
         
         # Check for Twitter embeds which contain the actual tweet content
         if message.embeds:
@@ -158,12 +189,12 @@ class DiscordHandler:
                 # Look for Twitter/TweetShift embeds
                 if embed.type == "rich" and embed.description:
                     # This is likely a Twitter embed with actual content
-                    content = embed.description[:500]
+                    content = embed.description[:1000]  # Increased limit
                     break
                 elif embed.url and twitter_link and embed.url == twitter_link:
                     # Found matching Twitter embed
                     if embed.description:
-                        content = embed.description[:500]
+                        content = embed.description[:1000]  # Increased limit
                         break
         
         # If we still have just a link, try to extract Twitter handle from content
@@ -172,6 +203,9 @@ class DiscordHandler:
                 if embed.url and self.TWITTER_URL_PATTERN.search(embed.url):
                     twitter_link = embed.url
                     break
+        
+        # Clean the content (fix Discord markdown while preserving structure)
+        content = self.clean_content(content)
         
         return TwitterPost(
             date=created_at.strftime('%Y-%m-%d'),
