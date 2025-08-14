@@ -4,13 +4,16 @@ A Python automation tool that collects Twitter/X posts from Discord channels and
 
 ## 🚀 Project Status
 
-### ✅ Completed Components (as of 2025-08-12)
+### ✅ Completed Components (as of 2025-08-14)
 
 1. **Discord Handler Module** (`modules/discord_handler.py`)
    - ✅ Connects to Discord using bot token
    - ✅ Fetches messages from specified channel
    - ✅ Filters messages containing Twitter/X links
    - ✅ Extracts embedded content from Discord messages (not just links)
+   - ✅ Preserves Discord markdown format for usernames (e.g., `[@username](link)`)
+   - ✅ Maintains paragraph structure from original embeds
+   - ✅ Handles zero-width characters in Discord markdown
    - ✅ Implements retry logic with exponential backoff
    - ✅ Formats data into structured `TwitterPost` objects
    - ✅ Supports date range queries
@@ -27,6 +30,8 @@ A Python automation tool that collects Twitter/X posts from Discord channels and
    - ✅ Preserves lists of trending projects/accounts
    - ✅ Includes bio information and descriptions
    - ✅ Maintains author information and timestamps
+   - ✅ Preserves multi-paragraph structure from embeds
+   - ✅ Supports content up to 1000 characters (increased from 500)
 
 ### 🔄 In Progress / Next Steps
 
@@ -139,7 +144,7 @@ This will generate:
 class TwitterPost:
     date: str         # YYYY-MM-DD format
     time: str         # HH:MM format
-    content: str      # Full embedded content (up to 500 chars)
+    content: str      # Full embedded content (up to 1000 chars)
     post_link: str    # Twitter/X URL
     author: str       # Discord username
     author_link: str  # Discord user profile URL
@@ -148,7 +153,11 @@ class TwitterPost:
 ### Sample CSV Output
 ```csv
 date,time,author,post_link,content,author_link
-2025-08-11,11:00,Web3 Alerts • TweetShift,https://twitter.com/...,🚀 New project alpha alert: @DV_aix (263 followers)...,https://discord.com/users/...
+2025-08-13,13:46,Web3 Alerts • TweetShift,https://twitter.com/Web3Alerts/status/...,"📈 Trending account alert: [@arc](https://twitter.com/arc) (15.3K followers) is trending among the web3 community
+
+Recently followed by 0xMert_, hasufl, mikedemarais
+
+Description: ""Arc is an open Layer-1 blockchain purpose-built for stablecoin finance.""",https://discord.com/users/...
 ```
 
 ## 🎯 Key Features Implemented
@@ -161,11 +170,13 @@ date,time,author,post_link,content,author_link
 ### 2. Content Extraction
 - **Before**: Only captured link text like `[Tweeted](url)`
 - **After**: Extracts full embedded content including:
-  - Project announcements with @handles
+  - Project announcements with @handles in Discord markdown format
   - Follower counts and account age
   - Bio descriptions
   - Lists of trending accounts
   - Alert followers
+  - Multi-paragraph structure preserved with proper newlines
+  - Discord markdown links properly formatted (e.g., `[@username](link)`)
 
 ### 3. Robust Error Handling
 - Exponential backoff retry for Discord API failures
@@ -222,9 +233,8 @@ Based on test runs (as of 2025-08-12):
 ## 🐛 Known Issues & Limitations
 
 1. **Discord API Rate Limits**: Current implementation handles rate limits but may need tuning for larger volumes
-2. **Content Truncation**: Posts are limited to 500 characters
-3. **Link Format**: Some Twitter links end with `)` which may need cleaning
-4. **Bot Detection**: Only processes messages from TweetShift and similar bots
+2. **Link Format**: Some Twitter links end with `)` which may need cleaning
+3. **Bot Detection**: Only processes messages from TweetShift and similar bots
 
 ## 📝 Notes for Resuming Development
 
@@ -256,5 +266,5 @@ Private project - All rights reserved
 
 ---
 
-*Last Updated: 2025-08-12 by Claude (AI Assistant)*  
-*Session Summary: Implemented and tested Discord data collection with embedded content extraction*
+*Last Updated: 2025-08-14 by Claude (AI Assistant)*  
+*Session Summary: Enhanced Discord content extraction with proper markdown formatting and paragraph structure preservation*
