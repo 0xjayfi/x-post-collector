@@ -406,21 +406,24 @@ class SheetAnalyzer:
                     daily_draft_col = i
             
             # Check if columns need to be added
+            needs_update = False
             
             if ai_summary_col == -1:
                 # Add after Content column (assuming it's column F, index 5)
                 new_col_index = len(headers)
                 headers.append('AI Summary')
                 ai_summary_col = new_col_index
+                needs_update = True
                 
             if daily_draft_col == -1:
                 # Add as last column
                 new_col_index = len(headers)
                 headers.append('Daily Post Draft')
                 daily_draft_col = new_col_index
+                needs_update = True
             
             # Update headers if needed
-            if ai_summary_col == -1 or daily_draft_col == -1:
+            if needs_update:
                 # Use append_data to add headers
                 # First, get all current data
                 all_rows = self.sheets.get_sheet_data()

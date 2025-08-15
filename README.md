@@ -286,26 +286,49 @@ Based on test runs (as of 2025-08-12):
 
 ## 🚦 Next Development Steps
 
-### Phase 1: Scheduling & Automation
+### Phase 1: X (Twitter) Publishing & Archiving
+1. **X API Integration** (`modules/x_publisher.py`)
+   - [ ] Authenticate with X API v2
+   - [ ] Publish Daily Post Draft content
+   - [ ] Handle rate limits and errors
+   - [ ] Return publication status/URL
+
+2. **Archive System** (`modules/archive_handler.py`)
+   - [ ] Move processed posts to Archive sheet
+   - [ ] Clear processed posts from Sheet1
+   - [ ] Add metadata columns:
+     - Date Processed (timestamp of archiving)
+     - X Post URL (link to published tweet)
+     - Processing Status (success/failed)
+   - [ ] Maintain data integrity during transfer
+
+3. **Workflow Integration**
+   - [ ] Chain: Analyze → Generate Draft → Publish → Archive
+   - [ ] Add rollback mechanism for failures
+   - [ ] Logging and error notifications
+
+### Phase 2: Scheduling & Automation
 1. Implement `scheduler.py` with daily runs
 2. Add manual trigger option
 3. Create systemd service or cron job
 4. Add health checks and monitoring
-5. Integrate Gemini analysis into daily workflow
+5. Integrate full workflow (Discord → Sheets → AI → X → Archive)
 
-### Phase 2: Production Deployment
+### Phase 3: Production Deployment
 1. Implement proper logging (`utils/logger.py`)
 2. Add configuration management
 3. Create main orchestration script (`main.py`)
 4. Set up error notifications
 5. Deploy to server/cloud
 
-### Phase 3: Enhancements
+### Phase 4: Enhancements
 1. Add data deduplication
 2. Implement data archiving (monthly sheets)
 3. Add analytics/reporting
 4. Create web dashboard (optional)
 5. Add multiple channel support
+6. Multi-language support for summaries
+7. Custom AI prompts per project type
 
 ## 🐛 Known Issues & Limitations
 
@@ -325,7 +348,10 @@ When you return to this project:
    - Add `GEMINI_API_KEY` to your `.env` file
    - Run `python test_gemini_integration.py` to test
 
-3. **Next Priority**: Implement scheduler for automated daily runs at 8 PM with Gemini analysis.
+3. **Next Priority**: 
+   - Implement X API publishing for Daily Post Draft
+   - Create archive system to move processed posts
+   - Add metadata tracking for processed items
 
 4. **Test Data Available**: Run `./venv/bin/python test_discord_integration.py` to generate fresh CSV files with current Discord data.
 
