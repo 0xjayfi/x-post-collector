@@ -13,7 +13,9 @@ DISCORD_CHANNEL_ID: Optional[str] = os.getenv('DISCORD_CHANNEL_ID')
 
 # Google Sheets Configuration
 GOOGLE_SHEETS_ID: Optional[str] = os.getenv('GOOGLE_SHEETS_ID')
-GOOGLE_SERVICE_ACCOUNT_FILE: Optional[str] = os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
+GOOGLE_SERVICE_ACCOUNT_FILE: Optional[str] = os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE', 'credentials.json')
+GOOGLE_SHEET_NAME: str = os.getenv('GOOGLE_SHEET_NAME', 'Sheet1')
+SHEETS_BATCH_SIZE: int = int(os.getenv('SHEETS_BATCH_SIZE', '100'))
 
 # Schedule Configuration
 SCHEDULE_TIME: str = os.getenv('SCHEDULE_TIME', '20:00')

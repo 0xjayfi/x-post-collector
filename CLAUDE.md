@@ -255,3 +255,4 @@ data = {k: v for k, v in zip(
 
 Remember: The goal is to build a tool that works reliably every day at 8 PM, not to showcase advanced Python features.  
 - discord-to-sheets-flowchart.mermaid
+- For test implementation, NO MOCK implementation please.

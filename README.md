@@ -4,7 +4,7 @@ A Python automation tool that collects Twitter/X posts from Discord channels and
 
 ## 🚀 Project Status
 
-### ✅ Completed Components (as of 2025-08-14)
+### ✅ Completed Components (as of 2025-08-15)
 
 1. **Discord Handler Module** (`modules/discord_handler.py`)
    - ✅ Connects to Discord using bot token
@@ -33,20 +33,25 @@ A Python automation tool that collects Twitter/X posts from Discord channels and
    - ✅ Preserves multi-paragraph structure from embeds
    - ✅ Supports content up to 1000 characters (increased from 500)
 
+4. **Google Sheets Integration** (`modules/sheets_handler.py`)
+   - ✅ Service account authentication with Google API
+   - ✅ CSV file reading with multiple encoding support
+   - ✅ Batch write operations for large datasets
+   - ✅ Duplicate detection via last entry date
+   - ✅ Sheet clearing with header preservation
+   - ✅ Exponential backoff retry for rate limits
+   - ✅ Comprehensive error handling and logging
+   - ✅ Support for append and replace modes
+   - ✅ Data validation and structure verification
+
 ### 🔄 In Progress / Next Steps
 
-1. **Google Sheets Integration** (`modules/sheets_handler.py`)
-   - [ ] Service account authentication setup
-   - [ ] Sheet structure validation
-   - [ ] Batch write operations
-   - [ ] Duplicate detection
-
-2. **Scheduler** (`modules/scheduler.py`)
+1. **Scheduler** (`modules/scheduler.py`)
    - [ ] Daily run at 20:00 (8 PM)
    - [ ] Manual trigger option
    - [ ] Error recovery
 
-3. **Main Application** (`main.py`)
+2. **Main Application** (`main.py`)
    - [ ] Orchestration logic
    - [ ] Configuration management
    - [ ] Error handling and logging
@@ -58,13 +63,13 @@ discord-to-sheets/
 ├── modules/
 │   ├── __init__.py
 │   ├── discord_handler.py      ✅ Complete & Tested
-│   ├── sheets_handler.py       🔄 To be implemented
+│   ├── sheets_handler.py       ✅ Complete & Tested
 │   ├── data_processor.py       🔄 To be implemented
 │   └── scheduler.py            🔄 To be implemented
 ├── tests/
 │   ├── __init__.py
 │   ├── test_discord_handler.py ✅ 16 unit tests passing
-│   ├── test_sheets_handler.py  🔄 To be implemented
+│   ├── test_sheets_handler.py  ✅ 12 unit tests passing
 │   └── test_data_processor.py  🔄 To be implemented
 ├── utils/
 │   └── logger.py               🔄 To be implemented
@@ -73,7 +78,9 @@ discord-to-sheets/
 ├── requirements.txt            ✅ Dependencies installed
 ├── CLAUDE.md                   ✅ AI assistant guidelines
 ├── test_discord_integration.py ✅ Integration tests with CSV export
+├── test_sheets_integration.py  ✅ Google Sheets upload testing
 ├── run_tests.py               ✅ Test runner utility
+├── plan.md                    ✅ Google Sheets setup guide
 └── README.md                  ✅ This file
 ```
 
@@ -82,13 +89,22 @@ discord-to-sheets/
 ### Prerequisites
 - Python 3.8+
 - Discord Bot Token
-- Google Service Account (for future implementation)
+- Google Cloud Project with Sheets API enabled
+- Google Service Account credentials (credentials.json)
 
 ### Environment Variables (.env)
 ```bash
+# Discord Configuration
 DISCORD_TOKEN=your_discord_bot_token
 DISCORD_CHANNEL_ID=your_channel_id
-GOOGLE_SHEETS_ID=your_sheet_id  # For future use
+
+# Google Sheets Configuration
+GOOGLE_SHEETS_ID=your_sheet_id  # Just the ID, not the full URL
+GOOGLE_SERVICE_ACCOUNT_FILE=credentials.json
+GOOGLE_SHEET_NAME=Sheet1
+SHEETS_BATCH_SIZE=100  # Optional, default 100
+
+# Schedule Configuration
 SCHEDULE_TIME=20:00  # Default 8 PM
 ```
 
@@ -104,6 +120,30 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+### Google Sheets Setup
+1. **Create Google Cloud Project**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create new project or select existing
+   - Enable Google Sheets API and Google Drive API
+
+2. **Create Service Account**
+   - Go to APIs & Services → Credentials
+   - Create Service Account
+   - Download JSON key as `credentials.json`
+   - Place in project root directory
+
+3. **Share Your Google Sheet**
+   - Open your target Google Sheet
+   - Click Share button
+   - Add service account email (found in credentials.json)
+   - Give Editor permissions
+
+4. **Configure Sheet ID**
+   - Copy ID from sheet URL: `https://docs.google.com/spreadsheets/d/SHEET_ID/edit`
+   - Add to `.env` file (just the ID, not full URL)
+
+For detailed instructions, see [plan.md](./plan.md)
+
 ## 🧪 Testing
 
 ### Run All Tests
@@ -118,11 +158,15 @@ python run_tests.py unit
 ./venv/bin/python -m unittest tests.test_discord_handler -v
 ```
 
-### Run Integration Tests (Requires Discord credentials)
+### Run Integration Tests
 ```bash
+# Discord Integration (Requires Discord credentials)
 python run_tests.py integration
 # or
 ./venv/bin/python test_discord_integration.py
+
+# Google Sheets Integration (Requires credentials.json)
+./venv/bin/python test_sheets_integration.py
 ```
 
 ### Generate CSV Exports for Inspection
@@ -184,11 +228,20 @@ Description: ""Arc is an open Layer-1 blockchain purpose-built for stablecoin fi
 - Graceful connection/disconnection
 - Comprehensive error logging
 
-### 4. Testing & Validation
-- 16 unit tests covering all major functions
-- 8 integration tests with real Discord data
+### 4. Google Sheets Integration
+- Service account authentication
+- Batch uploads for efficiency (configurable batch size)
+- Multiple modes: append or replace
+- Automatic retry with exponential backoff for rate limits
+- CSV structure validation
+- Duplicate detection via date checking
+- Support for large datasets (tested with 1000+ rows)
+
+### 5. Testing & Validation
+- 28 unit tests total (16 Discord + 12 Sheets)
+- Integration tests for both Discord and Google Sheets
 - CSV export for manual data inspection
-- Test coverage for edge cases
+- Test coverage for edge cases and error scenarios
 
 ## 📈 Statistics from Current Data
 
@@ -203,29 +256,22 @@ Based on test runs (as of 2025-08-12):
 
 ## 🚦 Next Development Steps
 
-### Phase 1: Google Sheets Integration
-1. Set up Google Service Account
-2. Implement `sheets_handler.py` module
-3. Create sheet structure validation
-4. Add batch write operations
-5. Implement duplicate detection
-
-### Phase 2: Scheduling & Automation
+### Phase 1: Scheduling & Automation
 1. Implement `scheduler.py` with daily runs
 2. Add manual trigger option
 3. Create systemd service or cron job
 4. Add health checks and monitoring
 
-### Phase 3: Production Deployment
+### Phase 2: Production Deployment
 1. Implement proper logging (`utils/logger.py`)
 2. Add configuration management
-3. Create main orchestration script
+3. Create main orchestration script (`main.py`)
 4. Set up error notifications
 5. Deploy to server/cloud
 
-### Phase 4: Enhancements
+### Phase 3: Enhancements
 1. Add data deduplication
-2. Implement data archiving
+2. Implement data archiving (monthly sheets)
 3. Add analytics/reporting
 4. Create web dashboard (optional)
 5. Add multiple channel support
@@ -235,20 +281,21 @@ Based on test runs (as of 2025-08-12):
 1. **Discord API Rate Limits**: Current implementation handles rate limits but may need tuning for larger volumes
 2. **Link Format**: Some Twitter links end with `)` which may need cleaning
 3. **Bot Detection**: Only processes messages from TweetShift and similar bots
+4. **Google Sheets Quotas**: API has daily quota limits (may need monitoring for high volume)
 
 ## 📝 Notes for Resuming Development
 
 When you return to this project:
 
-1. **Current State**: Discord handler is fully functional and tested. You can collect Twitter/X posts from Discord successfully.
+1. **Current State**: Both Discord handler and Google Sheets handler are fully functional and tested. The data pipeline from Discord to Google Sheets is complete.
 
-2. **Next Priority**: Implement Google Sheets integration to complete the data pipeline.
+2. **Next Priority**: Implement scheduler for automated daily runs at 8 PM.
 
 3. **Test Data Available**: Run `./venv/bin/python test_discord_integration.py` to generate fresh CSV files with current Discord data.
 
 4. **Architecture Decision**: The modular design allows you to work on Google Sheets independently without affecting Discord functionality.
 
-5. **Configuration**: Your Discord credentials are working correctly. Channel `#💎-early-alpha` (ID: 1392132542877929472) is being monitored successfully.
+5. **Configuration**: Both Discord and Google Sheets credentials are working correctly. Channel `#💎-early-alpha` (ID: 1392132542877929472) is being monitored successfully, and data can be uploaded to your Google Sheet.
 
 ## 📚 References
 
@@ -266,5 +313,5 @@ Private project - All rights reserved
 
 ---
 
-*Last Updated: 2025-08-14 by Claude (AI Assistant)*  
-*Session Summary: Enhanced Discord content extraction with proper markdown formatting and paragraph structure preservation*
+*Last Updated: 2025-08-15 by Claude (AI Assistant)*  
+*Session Summary: Implemented complete Google Sheets integration with batch uploads, rate limiting, and comprehensive error handling*
