@@ -20,6 +20,7 @@ ENV/
 .env
 .env.local
 .env.*.local
+credentials.json
 
 # IDE
 .vscode/
