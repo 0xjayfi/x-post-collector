@@ -77,3 +77,8 @@ SHEET_HEADERS = [
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 BATCH_SIZE = 100  # Maximum messages to process at once
+
+# Gemini AI Configuration
+GEMINI_API_KEY: Optional[str] = os.getenv('GEMINI_API_KEY')
+GEMINI_MODEL: str = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
+GEMINI_DAILY_LIMIT: int = int(os.getenv('GEMINI_DAILY_LIMIT', '1400'))

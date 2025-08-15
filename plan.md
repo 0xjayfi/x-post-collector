@@ -233,3 +233,412 @@ google-auth-oauthlib>=1.0.0
 3. Implement data archival strategy (monthly sheets?)
 4. Add monitoring and alerting
 5. Create backup mechanism
+
+---
+
+# Gemini AI Analyzer Implementation Plan
+
+## Overview
+Implement an AI-powered module to analyze Google Sheets content, identify new crypto/Web3 projects from Discord posts, and generate structured daily summaries using Google's Gemini AI (free tier).
+
+## Workflow Overview
+
+```mermaid
+flowchart TD
+    A[Access Google Sheet] --> B[Check/Create AI Summary Column]
+    B --> C[Check/Create Daily Post Draft Column]
+    C --> D[Read All Content Rows]
+    D --> E{For Each Row}
+    E --> F{Is New Project?}
+    F -->|Yes| G[Extract Twitter Info]
+    F -->|No| H[Skip Row]
+    G --> I[Generate AI Summary]
+    I --> J[Write to AI Summary Column]
+    H --> E
+    J --> E
+    E -->|All Rows Done| K[Concatenate All Summaries]
+    K --> L[Format as Daily Draft]
+    L --> M[Write to Daily Post Draft Column]
+```
+
+## Phase 1: Setup Requirements (User Action Required)
+
+### Step 1: Get Google AI Studio API Key (Free Tier)
+1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Click "Create API Key"
+3. Select your existing Google Cloud project (same one used for Sheets)
+4. Copy the API key
+5. **IMPORTANT**: Save this key securely, never commit to git
+
+### Step 2: Update Environment Variables
+Add to `.env`:
+```env
+# Existing Google Sheets Configuration
+GOOGLE_CREDENTIALS_PATH=credentials.json
+GOOGLE_SHEET_ID=your_sheet_id_here
+
+# New: Gemini AI Configuration
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-1.5-flash  # Free tier model
+GEMINI_DAILY_LIMIT=1400  # Leave buffer from 1500 limit
+```
+
+### Step 3: Install Dependencies
+```bash
+pip install google-generativeai
+```
+
+## Phase 2: Module Architecture
+
+### Module Structure
+```
+modules/gemini_analyzer.py
+├── Class: GeminiAnalyzer
+│   ├── __init__(api_key, model='gemini-1.5-flash')
+│   ├── is_new_project(content: str) → bool
+│   ├── extract_project_info(content: str) → ProjectInfo
+│   ├── generate_summary(content: str, bio: str) → str
+│   ├── create_daily_draft(summaries: List[ProjectSummary]) → str
+│   └── check_rate_limits() → bool
+│
+├── Class: SheetAnalyzer
+│   ├── __init__(sheets_handler, gemini_analyzer)
+│   ├── ensure_columns_exist() → None
+│   ├── analyze_all_rows() → List[ProjectSummary]
+│   ├── write_summaries(summaries: List[ProjectSummary])
+│   ├── generate_and_write_daily_draft()
+│   └── run_daily_analysis() → None
+│
+└── Data Classes:
+    ├── ProjectInfo(username, twitter_link, bio)
+    └── ProjectSummary(date, project_info, ai_summary)
+```
+
+## Phase 3: Implementation Details
+
+### 1. Project Detection Logic
+```python
+def is_new_project(self, content: str) -> bool:
+    """Use Gemini to determine if post is about a new project"""
+    
+    prompt = f"""
+    Analyze this Discord post containing a Twitter/X link.
+    Determine if this is announcing or discussing a NEW crypto/Web3 project.
+    
+    Post content: {content}
+    
+    Respond with only "YES" or "NO".
+    
+    Criteria for YES:
+    - Mentions new token launch, IDO, or TGE
+    - Announces new protocol or dApp
+    - Introduces new NFT collection
+    - New DeFi platform or tool
+    - New blockchain or L2
+    
+    Criteria for NO:
+    - General market discussion
+    - Price talk about existing tokens
+    - News about established projects
+    - Personal opinions without new project info
+    """
+    
+    response = self.model.generate_content(prompt)
+    return response.text.strip().upper() == "YES"
+```
+
+### 2. Information Extraction
+```python
+def extract_project_info(self, content: str) -> ProjectInfo:
+    """Extract Twitter username and bio from post content"""
+    
+    prompt = f"""
+    Extract project information from this post:
+    {content}
+    
+    Return JSON with:
+    - twitter_username: The @username mentioned
+    - twitter_link: Full Twitter/X URL
+    - bio_description: Project description from the post
+    
+    If bio not in post, return "No description provided"
+    """
+    
+    response = self.model.generate_content(prompt)
+    # Parse JSON response
+    return ProjectInfo(**json.loads(response.text))
+```
+
+### 3. Summary Generation
+```python
+def generate_summary(self, content: str, bio: str) -> str:
+    """Generate concise project summary"""
+    
+    prompt = f"""
+    Create a 1-2 sentence summary of this crypto project:
+    
+    Post: {content}
+    Bio/Description: {bio}
+    
+    Focus on:
+    - What the project does
+    - Key innovation or utility
+    - Target market or use case
+    
+    Keep under 30 words. Be specific and informative.
+    """
+    
+    response = self.model.generate_content(prompt)
+    return response.text.strip()
+```
+
+### 4. Daily Draft Generation
+```python
+def create_daily_draft(self, summaries: List[ProjectSummary]) -> str:
+    """Format all summaries into structured daily post"""
+    
+    if not summaries:
+        return "No new projects found today."
+    
+    # Group by date
+    grouped = {}
+    for summary in summaries:
+        date = summary.date
+        if date not in grouped:
+            grouped[date] = []
+        grouped[date].append(summary)
+    
+    # Format output
+    draft_lines = []
+    for date, projects in grouped.items():
+        draft_lines.append(f"🚀 New/Trending Projects on {date}:\n")
+        
+        for project in projects:
+            line = f"• [@{project.username}]({project.twitter_link}): {project.ai_summary}"
+            draft_lines.append(line)
+        
+        draft_lines.append("")  # Empty line between dates
+    
+    return "\n".join(draft_lines)
+```
+
+## Phase 4: Sheet Integration
+
+### Column Management
+```python
+def ensure_columns_exist(self):
+    """Add AI Summary and Daily Post Draft columns if missing"""
+    
+    # Get current headers
+    headers = self.sheets.get_headers()
+    
+    # Check for required columns
+    if 'AI Summary' not in headers:
+        # Add column after 'Content' column
+        self.sheets.add_column('AI Summary', after='Content')
+    
+    if 'Daily Post Draft' not in headers:
+        # Add as last column
+        self.sheets.add_column('Daily Post Draft')
+```
+
+### Batch Processing Strategy
+```python
+def analyze_all_rows(self) -> List[ProjectSummary]:
+    """Process all rows efficiently with rate limiting"""
+    
+    # Read all data at once
+    all_rows = self.sheets.read_all_rows()
+    
+    summaries = []
+    batch = []
+    
+    for row_idx, row in enumerate(all_rows[1:], start=2):  # Skip header
+        # Check if already analyzed
+        if row.get('AI Summary'):
+            continue
+            
+        batch.append((row_idx, row))
+        
+        # Process in batches of 5 to optimize API calls
+        if len(batch) >= 5:
+            summaries.extend(self._process_batch(batch))
+            batch = []
+            time.sleep(4)  # Rate limiting: 15 requests/minute
+    
+    # Process remaining
+    if batch:
+        summaries.extend(self._process_batch(batch))
+    
+    return summaries
+```
+
+## Phase 5: Rate Limiting & Cost Management
+
+### Free Tier Optimization
+```python
+class RateLimitManager:
+    """Manage Gemini API free tier limits"""
+    
+    def __init__(self):
+        self.daily_requests = 0
+        self.minute_requests = 0
+        self.last_reset = datetime.now()
+        self.last_minute = datetime.now()
+        
+    def can_make_request(self) -> bool:
+        """Check if within rate limits"""
+        now = datetime.now()
+        
+        # Reset daily counter
+        if now.date() > self.last_reset.date():
+            self.daily_requests = 0
+            self.last_reset = now
+        
+        # Reset minute counter
+        if (now - self.last_minute).seconds >= 60:
+            self.minute_requests = 0
+            self.last_minute = now
+        
+        # Check limits (conservative)
+        if self.daily_requests >= 1400:  # Leave 100 buffer
+            return False
+        if self.minute_requests >= 14:  # Leave 1 buffer from 15
+            return False
+            
+        return True
+    
+    def record_request(self):
+        """Record API call"""
+        self.daily_requests += 1
+        self.minute_requests += 1
+```
+
+### Prompt Optimization
+```python
+# Combine multiple analyses in one request to save API calls
+def batch_analyze(self, posts: List[str]) -> List[bool]:
+    """Analyze multiple posts in single API call"""
+    
+    combined_prompt = f"""
+    Analyze each post below. For each, respond YES if it's about a new crypto project, NO otherwise.
+    
+    {chr(10).join([f"Post {i+1}: {post}" for i, post in enumerate(posts)])}
+    
+    Response format:
+    Post 1: YES/NO
+    Post 2: YES/NO
+    ...
+    """
+    
+    response = self.model.generate_content(combined_prompt)
+    # Parse response
+    return self._parse_batch_response(response.text)
+```
+
+## Phase 6: Error Handling
+
+### API Error Management
+```python
+def handle_api_error(self, error: Exception) -> Optional[str]:
+    """Handle Gemini API errors gracefully"""
+    
+    error_str = str(error).lower()
+    
+    if "quota" in error_str or "429" in error_str:
+        logger.warning("Hit rate limit, waiting until tomorrow")
+        return "RATE_LIMITED"
+    
+    elif "api_key" in error_str:
+        logger.error("Invalid API key")
+        return "AUTH_ERROR"
+    
+    elif "timeout" in error_str:
+        logger.warning("Request timeout, retrying...")
+        return "RETRY"
+    
+    else:
+        logger.error(f"Unexpected error: {error}")
+        return "UNKNOWN"
+```
+
+## Phase 7: Testing Strategy
+
+### Unit Tests Required
+1. Test project detection accuracy
+2. Test information extraction
+3. Test summary generation quality
+4. Mock API responses for rate limit testing
+5. Test daily draft formatting
+
+### Integration Test Checklist
+- [ ] Process 10 sample posts
+- [ ] Verify AI Summary column creation
+- [ ] Test with mixed project/non-project posts
+- [ ] Validate daily draft generation
+- [ ] Test rate limit handling
+- [ ] Verify no data corruption in sheet
+
+## Phase 8: Usage Example
+
+```python
+from modules.sheets_handler import GoogleSheetsHandler
+from modules.gemini_analyzer import GeminiAnalyzer, SheetAnalyzer
+
+# Initialize components
+sheets = GoogleSheetsHandler(
+    credentials_path='credentials.json',
+    sheet_id=GOOGLE_SHEET_ID
+)
+
+gemini = GeminiAnalyzer(
+    api_key=GEMINI_API_KEY,
+    model='gemini-1.5-flash'
+)
+
+# Run analysis
+analyzer = SheetAnalyzer(sheets, gemini)
+analyzer.run_daily_analysis()
+
+# Result: Sheet updated with AI summaries and daily draft
+```
+
+## Success Criteria
+
+- [ ] Accurately identify new projects (>80% accuracy)
+- [ ] Generate concise, informative summaries
+- [ ] Stay within free tier limits (1500 requests/day)
+- [ ] Process 100 posts in under 5 minutes
+- [ ] Generate formatted daily draft automatically
+- [ ] Handle errors without data loss
+
+## Security Considerations
+
+1. **Never log API keys** - Redact in error messages
+2. **Validate content length** - Prevent prompt injection
+3. **Sanitize AI responses** - Remove any inappropriate content
+4. **Rate limit protection** - Prevent accidental quota exhaustion
+5. **Cache responses** - Avoid re-analyzing identical content
+
+## Cost Analysis
+
+### Free Tier Usage (Google AI Studio)
+- **Daily Limit**: 1,500 requests
+- **Per Minute**: 15 requests
+- **Your Usage**: ~100-200 requests/day (well within limits)
+- **Cost**: $0 (free tier)
+
+### If Scaling Beyond Free Tier
+- Move to Vertex AI with pay-per-use
+- Implement caching layer
+- Batch more aggressively
+- Consider weekly instead of daily analysis
+
+## Next Steps
+
+1. Get Gemini API key from Google AI Studio
+2. Test API connection with simple prompt
+3. Implement core analyzer module
+4. Add sheet integration
+5. Test with sample data
+6. Deploy to production
