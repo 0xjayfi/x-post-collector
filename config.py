@@ -78,6 +78,24 @@ def validate_x_api_config() -> bool:
     
     return True
 
+def validate_typefully_config() -> bool:
+    """Validate Typefully API configuration if using Typefully publisher."""
+    if PUBLISHER_TYPE.lower() != 'typefully':
+        return True  # Not using Typefully, no validation needed
+    
+    if not TYPEFULLY_API_KEY or TYPEFULLY_API_KEY.startswith('your_'):
+        print("Missing or invalid Typefully API key")
+        print("Please update your .env file with valid Typefully API key.")
+        return False
+    
+    # Validate hours delay is a reasonable number
+    if TYPEFULLY_HOURS_DELAY < 0 or TYPEFULLY_HOURS_DELAY > 168:  # Max 1 week
+        print(f"Invalid TYPEFULLY_HOURS_DELAY: {TYPEFULLY_HOURS_DELAY}")
+        print("Please set a value between 0 and 168 hours (1 week)")
+        return False
+    
+    return True
+
 # Application Configuration
 APP_NAME = "Discord to Google Sheets Bot"
 VERSION = "1.0.0"
@@ -118,7 +136,8 @@ PUBLISHER_TYPE: str = os.getenv('PUBLISHER_TYPE', 'twitter')  # 'twitter' or 'ty
 
 # Typefully Configuration (alternative to X API)
 TYPEFULLY_API_KEY: Optional[str] = os.getenv('TYPEFULLY_API_KEY')
-TYPEFULLY_SCHEDULE: str = os.getenv('TYPEFULLY_SCHEDULE', 'next-free-slot')
+TYPEFULLY_SCHEDULE: str = os.getenv('TYPEFULLY_SCHEDULE', 'next-free-slot')  # 'next-free-slot' or hours like '2h', '4h', '8h'
+TYPEFULLY_HOURS_DELAY: int = int(os.getenv('TYPEFULLY_HOURS_DELAY', '0'))  # If > 0, schedule X hours from now
 
 # Archive Configuration
 ARCHIVE_SHEET_NAME: str = os.getenv('ARCHIVE_SHEET_NAME', 'Archive')
