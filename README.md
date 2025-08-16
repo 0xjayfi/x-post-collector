@@ -4,7 +4,7 @@ A Python automation tool that collects Twitter/X posts from Discord channels and
 
 ## 🚀 Project Status
 
-### ✅ Completed Components (as of 2025-08-15)
+### ✅ Completed Components (as of 2025-08-16)
 
 1. **Discord Handler Module** (`modules/discord_handler.py`)
    - ✅ Connects to Discord using bot token
@@ -54,6 +54,17 @@ A Python automation tool that collects Twitter/X posts from Discord channels and
    - ✅ Daily draft generation with structured format
    - ✅ Automatic column creation (AI Summary, Daily Post Draft)
    - ✅ Integration test script with dry-run mode
+   - ✅ Fixed sheet update logic for proper column creation
+
+6. **X API Publisher** (`modules/x_publisher.py`)
+   - ✅ X API v2 authentication with OAuth 2.0
+   - ✅ Tweet publishing with automatic thread creation for long content
+   - ✅ Rate limiting (50 posts/day, 5 posts/15min)
+   - ✅ Typefully API support as alternative
+   - ✅ Content validation and formatting
+   - ✅ Automatic hashtag addition
+   - ✅ Error handling with detailed diagnostics
+   - ✅ Test script for permission validation (`test_x_api.py`)
 
 ### 🔄 In Progress / Next Steps
 
@@ -76,6 +87,8 @@ discord-to-sheets/
 │   ├── discord_handler.py      ✅ Complete & Tested
 │   ├── sheets_handler.py       ✅ Complete & Tested
 │   ├── gemini_analyzer.py      ✅ Complete & Tested
+│   ├── x_publisher.py          ✅ Complete & Tested
+│   ├── archive_handler.py      🔄 To be implemented
 │   ├── data_processor.py       🔄 To be implemented
 │   └── scheduler.py            🔄 To be implemented
 ├── tests/
@@ -93,8 +106,9 @@ discord-to-sheets/
 ├── test_discord_integration.py ✅ Integration tests with CSV export
 ├── test_sheets_integration.py  ✅ Google Sheets upload testing
 ├── test_gemini_integration.py  ✅ Gemini AI analyzer testing
+├── test_x_api.py              ✅ X API authentication & permission testing
 ├── run_tests.py               ✅ Test runner utility
-├── plan.md                    ✅ Google Sheets setup guide
+├── plan.md                    ✅ Implementation plans & X API setup guide
 └── README.md                  ✅ This file
 ```
 
@@ -122,6 +136,15 @@ SHEETS_BATCH_SIZE=100  # Optional, default 100
 GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_MODEL=gemini-1.5-flash  # Optional, default model
 GEMINI_DAILY_LIMIT=1400  # Optional, daily request limit
+
+# X API Configuration (for Twitter publishing)
+X_API_KEY=your_x_api_key
+X_API_SECRET=your_x_api_secret
+X_ACCESS_TOKEN=your_x_access_token
+X_ACCESS_TOKEN_SECRET=your_x_access_token_secret
+
+# Publishing Configuration
+PUBLISHER_TYPE=twitter  # 'twitter' or 'typefully'
 
 # Schedule Configuration
 SCHEDULE_TIME=20:00  # Default 8 PM
@@ -163,6 +186,30 @@ pip install -r requirements.txt
 
 For detailed instructions, see [plan.md](./plan.md)
 
+### X API Setup
+1. **Create X Developer Account**
+   - Go to [Twitter Developer Portal](https://developer.twitter.com)
+   - Apply for developer access
+   - Create a Project and App
+
+2. **Configure App Permissions**
+   - Go to App Settings → User authentication settings
+   - Set **App permissions** to **"Read and write"**
+   - Save settings
+
+3. **Generate Credentials**
+   - Go to Keys and tokens tab
+   - Save API Key and Secret
+   - Generate Access Token with Read/Write permissions
+   - Save all 4 credentials to `.env`
+
+4. **Test Authentication**
+   ```bash
+   ./venv/bin/python test_x_api.py
+   ```
+
+For detailed X API setup, see [plan.md](./plan.md)
+
 ## 🧪 Testing
 
 ### Run All Tests
@@ -189,6 +236,9 @@ python run_tests.py integration
 
 # Gemini AI Integration (Requires GEMINI_API_KEY)
 ./venv/bin/python test_gemini_integration.py
+
+# X API Integration (Requires X API credentials)
+./venv/bin/python test_x_api.py
 ```
 
 ### Generate CSV Exports for Inspection
@@ -269,9 +319,10 @@ Description: ""Arc is an open Layer-1 blockchain purpose-built for stablecoin fi
 
 ### 6. Testing & Validation
 - 46 unit tests total (16 Discord + 12 Sheets + 18 Gemini)
-- Integration tests for Discord, Google Sheets, and Gemini AI
+- Integration tests for Discord, Google Sheets, Gemini AI, and X API
 - CSV export for manual data inspection
 - Test coverage for edge cases and error scenarios
+- X API permission diagnostic tool
 
 ## 📈 Statistics from Current Data
 
@@ -288,10 +339,10 @@ Based on test runs (as of 2025-08-12):
 
 ### Phase 1: X (Twitter) Publishing & Archiving
 1. **X API Integration** (`modules/x_publisher.py`)
-   - [ ] Authenticate with X API v2
-   - [ ] Publish Daily Post Draft content
-   - [ ] Handle rate limits and errors
-   - [ ] Return publication status/URL
+   - ✅ Authenticate with X API v2
+   - ✅ Publish Daily Post Draft content
+   - ✅ Handle rate limits and errors
+   - ✅ Return publication status/URL
 
 2. **Archive System** (`modules/archive_handler.py`)
    - [ ] Move processed posts to Archive sheet
@@ -350,6 +401,27 @@ When you return to this project:
 
 3. **Next Priority**: 
    - Implement X API publishing for Daily Post Draft
+     Or implement Typefully API (below is an example)
+   ```python
+    import requests
+   API_KEY = "eNl4ryUZJmxFTOpr"
+   headers = {"X-API-KEY": f"Bearer {API_KEY}"}
+   payload = {
+      "content": f"""🚀 New/Trending Projects on 2025-08-11:
+   • @CakeshopApp: Cakeshop is an upcoming iOS app, likely offering an easy-to-use interface for a specific crypto-related task.
+
+   • @hyenatrade: No info yet
+
+   • @ZeroCool_AI: This project aims to build AGI-level vulnerability detection to secure all software.
+
+   • @underscore_hq: Underscore offers an AI-powered wallet for automated DeFi across all protocols, using secure AI agent delegation.""",
+      "schedule-date": "next-free-slot"
+   }
+   r = requests.post("https://api.typefully.com/v1/drafts/", headers=headers, json=payload, timeout=30)
+   r.raise_for_status()
+   print(r.json())
+   ```
+
    - Create archive system to move processed posts
    - Add metadata tracking for processed items
 
@@ -376,5 +448,5 @@ Private project - All rights reserved
 
 ---
 
-*Last Updated: 2025-08-15 by Claude (AI Assistant)*  
-*Session Summary: Implemented Gemini AI analyzer for automatic crypto project detection, Twitter/X info extraction from embedded Discord content, and AI-powered summarization with rate limiting for free tier usage*
+*Last Updated: 2025-08-16 by Claude (AI Assistant)*  
+*Session Summary: Implemented X API publisher module with OAuth 2.0 authentication, automatic thread creation for long content, rate limiting, and permission diagnostic tools. Fixed Gemini analyzer sheet update logic and added comprehensive X API setup documentation.*

@@ -642,3 +642,791 @@ analyzer.run_daily_analysis()
 4. Add sheet integration
 5. Test with sample data
 6. Deploy to production
+
+---
+
+# X API Publishing & Archiving Implementation Plan
+
+## Overview
+Implement automated publishing of AI-generated daily summaries to X (Twitter) and archive processed posts with metadata tracking. This completes the full pipeline: Discord → Sheets → AI Analysis → X Publishing → Archive.
+
+## Workflow Overview
+
+```mermaid
+flowchart TD
+    A[Read Daily Post Draft] --> B{Draft Exists?}
+    B -->|Yes| C[Publish to X/Typefully]
+    B -->|No| D[Skip Publishing]
+    C --> E{Published Successfully?}
+    E -->|Yes| F[Get Post URL]
+    E -->|No| G[Log Error & Continue]
+    F --> H[Read Processed Posts]
+    H --> I[Add Metadata Columns]
+    I --> J[Copy to Archive Sheet]
+    J --> K[Clear from Sheet1]
+    K --> L[Update Status]
+    G --> M[Mark as Failed]
+```
+
+## X API Setup Guide (User Action Required)
+
+### Step-by-Step X API v2 Credentials Setup
+
+#### 1. Create X Developer Account
+1. Go to [https://developer.twitter.com](https://developer.twitter.com)
+2. Click "Sign up" or "Apply" for developer access
+3. Log in with your X/Twitter account
+4. Select your use case:
+   - Choose "Making a bot" or "Building customized solutions"
+   - Select "No" for will you make Twitter content available to government entity
+
+#### 2. Complete Developer Application
+1. **Basic Information**:
+   - Account name: Your X handle
+   - Country: Your country
+   - Coding experience: Select appropriate level
+
+2. **Intended Use** (Example responses):
+   ```
+   Q: How will you use the X API?
+   A: "I will use the API to automatically publish daily summaries of 
+   crypto/Web3 projects discovered through community discussions. 
+   The bot will post curated lists of new projects with brief 
+   descriptions to help followers discover emerging opportunities."
+   
+   Q: Are you planning to analyze X data?
+   A: "No, only publishing content."
+   
+   Q: Will your app use Tweet, Retweet, Like, Follow, or Direct Message?
+   A: "Yes, only Tweet functionality to post daily summaries."
+   
+   Q: Do you plan to display Tweets or aggregate data?
+   A: "No, only posting original summaries."
+   ```
+
+3. **Review & Submit**:
+   - Review all information
+   - Accept Developer Agreement
+   - Submit application
+   - Wait for approval (usually instant for basic access)
+
+#### 3. Create a Project and App
+1. Once approved, go to [Developer Portal](https://developer.twitter.com/en/portal/dashboard)
+2. Click "Create Project":
+   - Project name: "Discord to X Publisher" (or your choice)
+   - Use case: "Making a bot"
+   - Project description: "Publishes daily crypto project summaries"
+
+3. Create an App within the project:
+   - App name: Must be unique (e.g., "YourName_Discord_Publisher")
+   - Click "Complete"
+
+#### 4. Generate API Keys and Tokens
+1. After creating the app, you'll see "Keys and tokens"
+2. **Save these immediately** (shown only once):
+   ```
+   API Key: [Your API Key]
+   API Key Secret: [Your API Secret]
+   Bearer Token: [Your Bearer Token]
+   ```
+
+3. Generate Access Token & Secret:
+   - Go to "Keys and tokens" tab
+   - Under "Authentication Tokens"
+   - Click "Generate" for Access Token and Secret
+   - **Set permissions**: Read and Write
+   - Save these credentials:
+   ```
+   Access Token: [Your Access Token]
+   Access Token Secret: [Your Access Token Secret]
+   ```
+
+#### 5. Configure App Permissions
+1. Go to "Settings" → "User authentication settings"
+2. Click "Set up"
+3. Configure:
+   - **App permissions**: Read and write
+   - **Type of App**: Web App, Automated App or Bot
+   - **App info**:
+     - Callback URL: `http://localhost:3000/callback` (not used but required)
+     - Website URL: Your website or `https://example.com`
+4. Save settings
+
+#### 6. Verify Rate Limits
+1. Check your access level:
+   - **Essential**: 500 posts/month
+   - **Elevated**: 1,500 posts/month (apply if needed)
+   - **Basic ($100/month)**: 3,000 posts/month
+
+2. To apply for Elevated access:
+   - Go to "Products" → "X API v2"
+   - Click "Apply for Elevated"
+   - Fill out additional use case details
+
+#### 7. Test Your Credentials
+```python
+import tweepy
+
+# Test authentication
+client = tweepy.Client(
+    consumer_key="YOUR_API_KEY",
+    consumer_secret="YOUR_API_KEY_SECRET",
+    access_token="YOUR_ACCESS_TOKEN",
+    access_token_secret="YOUR_ACCESS_TOKEN_SECRET"
+)
+
+# Test with a simple tweet
+try:
+    response = client.create_tweet(text="Hello from API test! 🚀")
+    print(f"Success! Tweet ID: {response.data['id']}")
+except Exception as e:
+    print(f"Error: {e}")
+```
+
+#### 8. Save Credentials to .env
+```env
+# X API Configuration
+X_API_KEY=your_api_key_here
+X_API_SECRET=your_api_key_secret_here
+X_ACCESS_TOKEN=your_access_token_here
+X_ACCESS_TOKEN_SECRET=your_access_token_secret_here
+```
+
+### Important Notes
+- **Never share or commit** these credentials
+- **Rate Limits**: Essential tier = ~16 tweets/day, Elevated = ~50 tweets/day
+- **Approval Time**: Usually instant for Essential, 1-2 days for Elevated
+- **Bot Rules**: Must comply with X's automation rules
+- **Account Requirements**: Your X account must have:
+  - Verified email
+  - Verified phone number
+  - Account older than 30 days
+
+### Troubleshooting Common Issues
+
+1. **"User is not Authorized" Error**:
+   - Regenerate tokens with correct permissions
+   - Ensure app has "Read and Write" access
+
+2. **"Rate limit exceeded"**:
+   - Check your tier limits
+   - Implement proper rate limiting in code
+
+3. **"Could not authenticate"**:
+   - Verify all 4 credentials are correct
+   - Check for extra spaces in .env file
+
+4. **Application Rejected**:
+   - Provide more detailed use case
+   - Emphasize legitimate use (not spam)
+   - Mention manual curation aspect
+
+## Part 1: X/Twitter Publishing Module
+
+### Module Structure
+```
+modules/x_publisher.py
+├── Class: XPublisher (Abstract Base)
+│   ├── __init__(api_credentials)
+│   ├── authenticate() → bool
+│   ├── publish(content: str) → PublishResult
+│   └── validate_content(content: str) → bool
+│
+├── Class: TwitterAPIPublisher(XPublisher)
+│   ├── Uses X API v2 (OAuth 2.0)
+│   ├── Handle rate limits
+│   └── Thread support
+│
+├── Class: TypefullyPublisher(XPublisher)
+│   ├── Uses Typefully API
+│   ├── Schedule drafts
+│   └── Simpler authentication
+│
+└── Data Classes:
+    └── PublishResult(success, url, error_msg, post_id)
+```
+
+### Option A: X API v2 (Direct Twitter Publishing)
+
+#### Prerequisites
+1. Apply for X API access at https://developer.twitter.com
+2. Create a Project and App
+3. Get credentials:
+   - API Key
+   - API Secret
+   - Access Token
+   - Access Token Secret
+
+#### Environment Variables
+```env
+# X API Configuration
+X_API_KEY=your_api_key
+X_API_SECRET=your_api_secret
+X_ACCESS_TOKEN=your_access_token
+X_ACCESS_TOKEN_SECRET=your_access_token_secret
+```
+
+#### Implementation
+```python
+import tweepy
+from typing import Optional
+
+class TwitterAPIPublisher(XPublisher):
+    def __init__(self, api_key: str, api_secret: str, 
+                 access_token: str, access_token_secret: str):
+        self.client = tweepy.Client(
+            consumer_key=api_key,
+            consumer_secret=api_secret,
+            access_token=access_token,
+            access_token_secret=access_token_secret
+        )
+    
+    def publish(self, content: str) -> PublishResult:
+        """Publish content as a thread if needed"""
+        try:
+            # Split content if > 280 chars
+            tweets = self._split_into_tweets(content)
+            
+            # Post first tweet
+            response = self.client.create_tweet(text=tweets[0])
+            tweet_id = response.data['id']
+            tweet_url = f"https://twitter.com/user/status/{tweet_id}"
+            
+            # Thread remaining tweets if any
+            for tweet in tweets[1:]:
+                response = self.client.create_tweet(
+                    text=tweet,
+                    in_reply_to_tweet_id=tweet_id
+                )
+                tweet_id = response.data['id']
+            
+            return PublishResult(
+                success=True,
+                url=tweet_url,
+                post_id=tweet_id
+            )
+        except Exception as e:
+            return PublishResult(
+                success=False,
+                error_msg=str(e)
+            )
+```
+
+### Option B: Typefully API (Recommended - Simpler)
+
+#### Prerequisites
+1. Create account at https://typefully.com
+2. Get API key from settings
+3. No approval process needed
+
+#### Environment Variables
+```env
+# Typefully Configuration
+TYPEFULLY_API_KEY=your_typefully_api_key
+TYPEFULLY_SCHEDULE=next-free-slot  # or specific time
+```
+
+#### Implementation
+```python
+import requests
+from datetime import datetime
+
+class TypefullyPublisher(XPublisher):
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.base_url = "https://api.typefully.com/v1"
+        self.headers = {"X-API-KEY": f"Bearer {api_key}"}
+    
+    def publish(self, content: str, schedule: str = "next-free-slot") -> PublishResult:
+        """Create a draft in Typefully"""
+        try:
+            payload = {
+                "content": content,
+                "schedule-date": schedule
+            }
+            
+            response = requests.post(
+                f"{self.base_url}/drafts/",
+                headers=self.headers,
+                json=payload,
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            draft_id = data.get('id')
+            
+            # Get draft URL (may need separate API call)
+            draft_url = f"https://typefully.com/drafts/{draft_id}"
+            
+            return PublishResult(
+                success=True,
+                url=draft_url,
+                post_id=draft_id
+            )
+        except requests.exceptions.RequestException as e:
+            return PublishResult(
+                success=False,
+                error_msg=str(e)
+            )
+```
+
+### Content Formatting
+```python
+def format_for_publishing(daily_draft: str) -> str:
+    """Format the daily draft for X/Twitter"""
+    
+    # Add hashtags
+    hashtags = "\n\n#CryptoProjects #Web3 #DeFi #NFTs"
+    
+    # Check length
+    if len(daily_draft) + len(hashtags) <= 280:
+        return daily_draft + hashtags
+    
+    # Truncate if needed
+    max_content_length = 280 - len(hashtags) - 3  # -3 for "..."
+    truncated = daily_draft[:max_content_length] + "..."
+    
+    return truncated + hashtags
+```
+
+## Part 2: Archive System Module
+
+### Module Structure
+```
+modules/archive_handler.py
+├── Class: ArchiveHandler
+│   ├── __init__(sheets_handler: GoogleSheetsHandler)
+│   ├── ensure_archive_sheet_exists() → bool
+│   ├── add_metadata_columns() → None
+│   ├── archive_processed_posts(metadata: Dict) → int
+│   ├── clear_processed_from_source() → bool
+│   └── rollback_on_failure() → bool
+│
+└── Data Classes:
+    └── ArchiveMetadata(date_processed, x_post_url, status, error_msg)
+```
+
+### Archive Sheet Structure
+```
+Archive Sheet Columns:
+- date (from original)
+- time (from original)
+- author (from original)
+- post_link (from original)
+- content (from original)
+- author_link (from original)
+- AI Summary (from processing)
+- Date Processed (NEW - timestamp)
+- X Post URL (NEW - published tweet URL)
+- Processing Status (NEW - success/failed/skipped)
+- Error Message (NEW - if failed)
+```
+
+### Implementation
+```python
+from datetime import datetime
+from typing import List, Dict, Optional
+
+class ArchiveHandler:
+    def __init__(self, sheets_handler: GoogleSheetsHandler):
+        self.sheets = sheets_handler
+        self.archive_sheet_name = "Archive"
+        self.source_sheet_name = "Sheet1"
+    
+    def ensure_archive_sheet_exists(self) -> bool:
+        """Create Archive sheet if it doesn't exist"""
+        try:
+            # Check if Archive sheet exists
+            sheet_metadata = self.sheets.get_sheet_metadata()
+            sheet_names = [sheet['properties']['title'] 
+                          for sheet in sheet_metadata['sheets']]
+            
+            if self.archive_sheet_name not in sheet_names:
+                # Create new sheet
+                self.sheets.create_sheet(self.archive_sheet_name)
+                
+                # Add headers
+                headers = [
+                    'date', 'time', 'author', 'post_link', 
+                    'content', 'author_link', 'AI Summary',
+                    'Date Processed', 'X Post URL', 
+                    'Processing Status', 'Error Message'
+                ]
+                self.sheets.append_data([headers], self.archive_sheet_name)
+                logger.info(f"Created Archive sheet with headers")
+                
+            return True
+        except Exception as e:
+            logger.error(f"Failed to ensure archive sheet: {e}")
+            return False
+    
+    def archive_processed_posts(self, 
+                               x_post_url: Optional[str] = None,
+                               status: str = "success") -> int:
+        """
+        Move posts with AI summaries to Archive sheet
+        
+        Returns:
+            Number of posts archived
+        """
+        try:
+            # Read all data from Sheet1
+            source_data = self.sheets.get_sheet_data(self.source_sheet_name)
+            
+            if len(source_data) <= 1:
+                logger.info("No data to archive")
+                return 0
+            
+            headers = source_data[0]
+            data_rows = source_data[1:]
+            
+            # Find AI Summary column
+            ai_summary_idx = headers.index('AI Summary') if 'AI Summary' in headers else -1
+            
+            if ai_summary_idx == -1:
+                logger.warning("AI Summary column not found")
+                return 0
+            
+            # Separate processed and unprocessed
+            processed_rows = []
+            unprocessed_rows = []
+            
+            for row in data_rows:
+                # Ensure row has enough columns
+                while len(row) <= ai_summary_idx:
+                    row.append('')
+                
+                if row[ai_summary_idx]:  # Has AI summary
+                    # Add metadata
+                    archived_row = row.copy()
+                    archived_row.extend([
+                        datetime.now().isoformat(),  # Date Processed
+                        x_post_url or '',  # X Post URL
+                        status,  # Processing Status
+                        ''  # Error Message
+                    ])
+                    processed_rows.append(archived_row)
+                else:
+                    unprocessed_rows.append(row)
+            
+            if processed_rows:
+                # Append to Archive sheet
+                self.sheets.append_data(processed_rows, self.archive_sheet_name)
+                logger.info(f"Archived {len(processed_rows)} posts")
+                
+                # Update Sheet1 with only unprocessed rows
+                self.sheets.clear_sheet(self.source_sheet_name, preserve_headers=True)
+                if unprocessed_rows:
+                    self.sheets.append_data(unprocessed_rows, self.source_sheet_name)
+                
+                return len(processed_rows)
+            
+            return 0
+            
+        except Exception as e:
+            logger.error(f"Failed to archive posts: {e}")
+            raise
+    
+    def clear_daily_draft_column(self) -> bool:
+        """Clear the Daily Post Draft column after publishing"""
+        try:
+            # Read current data
+            data = self.sheets.get_sheet_data(self.source_sheet_name)
+            headers = data[0]
+            
+            # Find Daily Post Draft column
+            draft_col_idx = headers.index('Daily Post Draft') if 'Daily Post Draft' in headers else -1
+            
+            if draft_col_idx >= 0:
+                # Clear the column (except header)
+                for i in range(1, len(data)):
+                    if len(data[i]) > draft_col_idx:
+                        data[i][draft_col_idx] = ''
+                
+                # Rewrite the sheet
+                self.sheets.clear_sheet(self.source_sheet_name, preserve_headers=False)
+                self.sheets.append_data(data, self.source_sheet_name)
+                
+                logger.info("Cleared Daily Post Draft column")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Failed to clear draft column: {e}")
+            return False
+```
+
+## Part 3: Workflow Integration
+
+### Main Workflow Orchestrator
+```python
+# modules/workflow_orchestrator.py
+
+class WorkflowOrchestrator:
+    def __init__(self, sheets_handler, gemini_analyzer, publisher, archive_handler):
+        self.sheets = sheets_handler
+        self.gemini = gemini_analyzer
+        self.publisher = publisher
+        self.archiver = archive_handler
+    
+    def run_complete_workflow(self) -> Dict:
+        """
+        Complete workflow: Analyze → Publish → Archive
+        """
+        results = {
+            'analysis': False,
+            'publishing': False,
+            'archiving': False,
+            'posts_processed': 0,
+            'x_post_url': None,
+            'errors': []
+        }
+        
+        try:
+            # Step 1: Run Gemini Analysis
+            logger.info("Starting AI analysis...")
+            analyzer = SheetAnalyzer(self.sheets, self.gemini)
+            analyzer.run_daily_analysis()
+            results['analysis'] = True
+            
+            # Step 2: Read Daily Draft
+            daily_draft = self._get_daily_draft()
+            
+            if daily_draft:
+                # Step 3: Publish to X
+                logger.info("Publishing to X...")
+                publish_result = self.publisher.publish(daily_draft)
+                
+                if publish_result.success:
+                    results['publishing'] = True
+                    results['x_post_url'] = publish_result.url
+                    logger.info(f"Published: {publish_result.url}")
+                else:
+                    results['errors'].append(f"Publishing failed: {publish_result.error_msg}")
+            
+            # Step 4: Archive Processed Posts
+            logger.info("Archiving processed posts...")
+            posts_archived = self.archiver.archive_processed_posts(
+                x_post_url=results['x_post_url'],
+                status='success' if results['publishing'] else 'analysis_only'
+            )
+            
+            results['archiving'] = True
+            results['posts_processed'] = posts_archived
+            
+            # Step 5: Clear daily draft column
+            self.archiver.clear_daily_draft_column()
+            
+            logger.info(f"Workflow complete: {posts_archived} posts processed")
+            
+        except Exception as e:
+            logger.error(f"Workflow failed: {e}")
+            results['errors'].append(str(e))
+        
+        return results
+    
+    def _get_daily_draft(self) -> Optional[str]:
+        """Get the daily draft from Sheet1"""
+        try:
+            data = self.sheets.get_sheet_data()
+            headers = data[0]
+            
+            draft_col_idx = headers.index('Daily Post Draft') if 'Daily Post Draft' in headers else -1
+            
+            if draft_col_idx >= 0 and len(data) > 1:
+                # Check first data row for draft
+                if len(data[1]) > draft_col_idx:
+                    return data[1][draft_col_idx]
+            
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get daily draft: {e}")
+            return None
+```
+
+## Part 4: Error Handling & Recovery
+
+### Rollback Mechanism
+```python
+class TransactionManager:
+    """Manage atomic operations with rollback capability"""
+    
+    def __init__(self):
+        self.backup_data = {}
+        self.operations = []
+    
+    def backup_sheet(self, sheets_handler, sheet_name):
+        """Backup sheet data before modifications"""
+        self.backup_data[sheet_name] = sheets_handler.get_sheet_data(sheet_name)
+        
+    def add_operation(self, operation, rollback_fn):
+        """Track operations for potential rollback"""
+        self.operations.append({
+            'operation': operation,
+            'rollback': rollback_fn,
+            'completed': False
+        })
+    
+    def rollback(self):
+        """Rollback all completed operations"""
+        for op in reversed(self.operations):
+            if op['completed']:
+                try:
+                    op['rollback']()
+                    logger.info(f"Rolled back: {op['operation']}")
+                except Exception as e:
+                    logger.error(f"Rollback failed: {e}")
+```
+
+### Rate Limiting for Publishing
+```python
+class PublishRateLimiter:
+    """Handle X API rate limits"""
+    
+    def __init__(self, posts_per_day=50, posts_per_15min=5):
+        self.daily_limit = posts_per_day
+        self.window_limit = posts_per_15min
+        self.daily_posts = 0
+        self.window_posts = []
+        self.last_reset = datetime.now()
+    
+    def can_publish(self) -> bool:
+        """Check if we can publish now"""
+        now = datetime.now()
+        
+        # Reset daily counter
+        if now.date() > self.last_reset.date():
+            self.daily_posts = 0
+            self.last_reset = now
+        
+        # Check daily limit
+        if self.daily_posts >= self.daily_limit:
+            return False
+        
+        # Check 15-minute window
+        window_start = now - timedelta(minutes=15)
+        self.window_posts = [t for t in self.window_posts if t > window_start]
+        
+        return len(self.window_posts) < self.window_limit
+    
+    def record_post(self):
+        """Record a successful post"""
+        self.daily_posts += 1
+        self.window_posts.append(datetime.now())
+```
+
+## Part 5: Configuration & Setup
+
+### Environment Variables
+```env
+# Publishing Configuration (choose one)
+PUBLISHER_TYPE=typefully  # or 'twitter'
+
+# Typefully API
+TYPEFULLY_API_KEY=your_api_key
+TYPEFULLY_SCHEDULE=next-free-slot
+
+# X API (if using Twitter directly)
+X_API_KEY=your_api_key
+X_API_SECRET=your_api_secret
+X_ACCESS_TOKEN=your_access_token
+X_ACCESS_TOKEN_SECRET=your_access_token_secret
+
+# Archive Configuration
+ARCHIVE_SHEET_NAME=Archive
+ARCHIVE_BATCH_SIZE=50
+```
+
+### Config Updates
+```python
+# config.py additions
+
+# Publishing settings
+PUBLISHER_TYPE = os.getenv('PUBLISHER_TYPE', 'typefully')
+
+# Typefully settings
+TYPEFULLY_API_KEY = os.getenv('TYPEFULLY_API_KEY')
+TYPEFULLY_SCHEDULE = os.getenv('TYPEFULLY_SCHEDULE', 'next-free-slot')
+
+# X API settings
+X_API_KEY = os.getenv('X_API_KEY')
+X_API_SECRET = os.getenv('X_API_SECRET')
+X_ACCESS_TOKEN = os.getenv('X_ACCESS_TOKEN')
+X_ACCESS_TOKEN_SECRET = os.getenv('X_ACCESS_TOKEN_SECRET')
+
+# Archive settings
+ARCHIVE_SHEET_NAME = os.getenv('ARCHIVE_SHEET_NAME', 'Archive')
+ARCHIVE_BATCH_SIZE = int(os.getenv('ARCHIVE_BATCH_SIZE', '50'))
+```
+
+## Part 6: Testing Strategy
+
+### Unit Tests
+```python
+# tests/test_x_publisher.py
+class TestXPublisher(unittest.TestCase):
+    def test_content_validation(self):
+        """Test content length validation"""
+        
+    def test_tweet_splitting(self):
+        """Test splitting long content into threads"""
+        
+    def test_rate_limiting(self):
+        """Test rate limit detection"""
+
+# tests/test_archive_handler.py
+class TestArchiveHandler(unittest.TestCase):
+    def test_archive_creation(self):
+        """Test Archive sheet creation"""
+        
+    def test_metadata_addition(self):
+        """Test adding metadata columns"""
+        
+    def test_rollback(self):
+        """Test rollback on failure"""
+```
+
+### Integration Test Script
+```python
+# test_publishing_integration.py
+def test_complete_workflow():
+    """Test the complete publishing and archiving workflow"""
+    
+    # 1. Create test data in Sheet1
+    # 2. Run AI analysis
+    # 3. Publish draft (to test account)
+    # 4. Archive processed posts
+    # 5. Verify Archive sheet
+    # 6. Verify Sheet1 cleared
+```
+
+## Success Criteria
+
+- [ ] Successfully authenticate with X/Typefully API
+- [ ] Publish daily draft without errors
+- [ ] Archive processed posts with metadata
+- [ ] Clear processed posts from Sheet1
+- [ ] Handle API rate limits gracefully
+- [ ] Rollback on failure without data loss
+- [ ] Complete workflow in < 60 seconds
+- [ ] Maintain data integrity throughout
+
+## Security Considerations
+
+1. **API Keys**: Never log or expose API keys
+2. **Content Validation**: Sanitize content before publishing
+3. **Rate Limiting**: Respect API limits to avoid bans
+4. **Backup**: Always backup before destructive operations
+5. **Audit Trail**: Log all publishing attempts
+
+## Next Steps
+
+1. Choose publishing platform (X API or Typefully)
+2. Obtain API credentials
+3. Implement publisher module
+4. Implement archive handler
+5. Create workflow orchestrator
+6. Test with sample data
+7. Deploy to production

@@ -358,7 +358,7 @@ Post 2: YES/NO
                 link = project.project_info.twitter_link
                 summary = project.ai_summary
                 
-                line = f"• [@{username}]({link}): {summary}"
+                line = f"☘️ [@{username}]({link}): {summary}\n"
                 draft_lines.append(line)
             
             draft_lines.append("")  # Empty line between dates
