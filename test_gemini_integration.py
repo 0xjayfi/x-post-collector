@@ -129,6 +129,7 @@ def test_sheet_analysis(limit_rows=5, dry_run=True):
         # Analyze rows
         print("\n🔍 Analyzing content for new projects...")
         new_projects = []
+        all_analyzed = []  # Track all rows including non-projects
         
         for i, row in enumerate(data_rows, start=2):
             if len(row) > content_idx:
@@ -158,17 +159,35 @@ def test_sheet_analysis(limit_rows=5, dry_run=True):
                             'summary': summary
                         })
                         
+                        all_analyzed.append({
+                            'row': i,
+                            'summary': summary
+                        })
+                        
                         print(f"   Username: @{project_info.username}")
                         print(f"   Summary: {summary}")
+                    else:
+                        # Failed to extract project info
+                        all_analyzed.append({
+                            'row': i,
+                            'summary': "Not new project related"
+                        })
+                        print(f"   ⚪ Could not extract project information")
                 else:
                     print(f"   ⚪ Not a new project announcement")
+                    all_analyzed.append({
+                        'row': i,
+                        'summary': "Not new project related"
+                    })
         
         # Display results
         print("\n" + "="*50)
         print("ANALYSIS RESULTS")
         print("="*50)
         print(f"Total rows analyzed: {len(data_rows)}")
+        print(f"All rows processed: {len(all_analyzed)}")
         print(f"New projects found: {len(new_projects)}")
+        print(f"Non-project posts: {len(all_analyzed) - len(new_projects)}")
         
         if new_projects:
             print("\n📋 New Projects Summary:")
@@ -202,7 +221,7 @@ def test_sheet_analysis(limit_rows=5, dry_run=True):
                 # Write the analyzed summaries
                 from modules.gemini_analyzer import ProjectSummary, ProjectInfo
                 
-                # Convert to ProjectSummary objects
+                # Convert to ProjectSummary objects for daily draft
                 project_summaries = []
                 for proj in new_projects:
                     project_summaries.append(ProjectSummary(
@@ -217,15 +236,23 @@ def test_sheet_analysis(limit_rows=5, dry_run=True):
                     ))
                 
                 # Ensure columns exist
-                ai_summary_col, daily_draft_col = analyzer.ensure_columns_exist()
+                ai_summary_col, ai_processed_col, daily_draft_col = analyzer.ensure_columns_exist()
                 
-                # Write summaries
-                analyzer.write_summaries(project_summaries, ai_summary_col)
+                # Convert all analyzed rows to the format expected by write_summaries
+                all_processed = [(row['row'], row['summary']) for row in all_analyzed]
                 
-                # Generate and write daily draft
-                analyzer.generate_and_write_daily_draft(project_summaries, daily_draft_col)
+                # Write all summaries (including "Not new project related")
+                analyzer.write_summaries(all_processed, ai_summary_col, ai_processed_col)
+                
+                # Generate and write daily draft (only for actual projects)
+                if project_summaries:
+                    analyzer.generate_and_write_daily_draft(project_summaries, daily_draft_col)
                 
                 print("✅ Results written to sheet")
+                print(f"   - {len(all_processed)} rows marked with AI summaries")
+                print(f"   - {len(all_processed)} rows marked as 'AI processed: TRUE'")
+                if project_summaries:
+                    print(f"   - Daily draft generated with {len(project_summaries)} projects")
             else:
                 print("\n⚠️  DRY RUN MODE - No changes written to sheet")
                 print("   To write results, run with dry_run=False")
@@ -312,8 +339,9 @@ def main():
     print("1. Review the analysis results above")
     print("2. If results look good, run option 4 to write to sheet")
     print("3. Check your Google Sheet for new columns:")
-    print("   - AI Summary (individual project summaries)")
-    print("   - Daily Post Draft (consolidated daily summary)")
+    print("   - AI Summary (project summaries or 'Not new project related')")
+    print("   - AI processed (TRUE for all analyzed rows)")
+    print("   - Daily Post Draft (consolidated daily summary of actual projects)")
     
     print("\n💡 To run full analysis on all rows:")
     print("   from modules.gemini_analyzer import GeminiAnalyzer, SheetAnalyzer")

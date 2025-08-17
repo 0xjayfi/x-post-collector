@@ -381,12 +381,12 @@ class SheetAnalyzer:
         self.gemini = gemini_analyzer
         logger.info("Initialized SheetAnalyzer")
     
-    def ensure_columns_exist(self) -> Tuple[int, int]:
+    def ensure_columns_exist(self) -> Tuple[int, int, int]:
         """
-        Add AI Summary and Daily Post Draft columns if missing
+        Add AI Summary, AI processed, and Daily Post Draft columns if missing
         
         Returns:
-            Tuple of (ai_summary_col_index, daily_draft_col_index)
+            Tuple of (ai_summary_col_index, ai_processed_col_index, daily_draft_col_index)
         """
         try:
             # Get current headers
@@ -396,12 +396,15 @@ class SheetAnalyzer:
             headers = result.get('values', [[]])[0] if result.get('values') else []
             
             ai_summary_col = -1
+            ai_processed_col = -1
             daily_draft_col = -1
             
             # Check for existing columns
             for i, header in enumerate(headers):
                 if header == 'AI Summary':
                     ai_summary_col = i
+                elif header == 'AI processed':
+                    ai_processed_col = i
                 elif header == 'Daily Post Draft':
                     daily_draft_col = i
             
@@ -413,6 +416,21 @@ class SheetAnalyzer:
                 new_col_index = len(headers)
                 headers.append('AI Summary')
                 ai_summary_col = new_col_index
+                needs_update = True
+            
+            # Add AI processed column right after AI Summary if it doesn't exist
+            if ai_processed_col == -1:
+                # Insert after AI Summary column
+                insert_index = ai_summary_col + 1
+                if insert_index <= len(headers):
+                    headers.insert(insert_index, 'AI processed')
+                    ai_processed_col = insert_index
+                    # Adjust daily_draft_col if it was already set and comes after
+                    if daily_draft_col >= insert_index:
+                        daily_draft_col += 1
+                else:
+                    headers.append('AI processed')
+                    ai_processed_col = len(headers) - 1
                 needs_update = True
                 
             if daily_draft_col == -1:
@@ -439,20 +457,21 @@ class SheetAnalyzer:
                 self.sheets.append_data(all_rows)
                 logger.info("Added missing columns to sheet")
             
-            return ai_summary_col, daily_draft_col
+            return ai_summary_col, ai_processed_col, daily_draft_col
             
         except Exception as e:
             logger.error(f"Error ensuring columns exist: {e}")
             raise
     
-    def analyze_all_rows(self) -> List[ProjectSummary]:
+    def analyze_all_rows(self) -> Tuple[List[ProjectSummary], List[Tuple[int, str]]]:
         """
         Process all rows efficiently with rate limiting
         
         Returns:
-            List of project summaries
+            Tuple of (List of project summaries, List of all processed rows with AI summaries)
         """
         summaries = []
+        all_processed_rows = []
         
         try:
             # Read all data
@@ -460,7 +479,7 @@ class SheetAnalyzer:
             
             if len(rows) <= 1:  # No data or only headers
                 logger.info("No data rows to analyze")
-                return summaries
+                return summaries, all_processed_rows
             
             headers = rows[0]
             data_rows = rows[1:]
@@ -494,22 +513,26 @@ class SheetAnalyzer:
                 
                 # Process batch when full or at end
                 if len(batch) >= 5:
-                    summaries.extend(self._process_batch(batch))
+                    batch_summaries, batch_processed = self._process_batch(batch)
+                    summaries.extend(batch_summaries)
+                    all_processed_rows.extend(batch_processed)
                     batch = []
                     time.sleep(4)  # Rate limiting between batches
             
             # Process remaining batch
             if batch:
-                summaries.extend(self._process_batch(batch))
+                batch_summaries, batch_processed = self._process_batch(batch)
+                summaries.extend(batch_summaries)
+                all_processed_rows.extend(batch_processed)
             
-            logger.info(f"Analyzed {len(summaries)} new projects")
-            return summaries
+            logger.info(f"Analyzed {len(all_processed_rows)} rows, found {len(summaries)} new projects")
+            return summaries, all_processed_rows
             
         except Exception as e:
             logger.error(f"Error analyzing rows: {e}")
-            return summaries
+            return summaries, all_processed_rows
     
-    def _process_batch(self, batch: List[Tuple[int, Dict]]) -> List[ProjectSummary]:
+    def _process_batch(self, batch: List[Tuple[int, Dict]]) -> Tuple[List[ProjectSummary], List[Tuple[int, str]]]:
         """
         Process a batch of rows
         
@@ -517,14 +540,15 @@ class SheetAnalyzer:
             batch: List of (row_index, row_data) tuples
             
         Returns:
-            List of project summaries
+            Tuple of (List of project summaries, List of (row_index, ai_summary) for all processed rows)
         """
         summaries = []
+        all_processed = []  # Track all processed rows, including non-projects
         
         # First, batch check which are new projects
         project_checks = self.gemini.batch_analyze_projects(batch)
         
-        # Process each identified project
+        # Process each row
         for (row_idx, is_project), (_, row_data) in zip(project_checks, batch):
             if is_project:
                 content = row_data['content']
@@ -543,19 +567,28 @@ class SheetAnalyzer:
                         row_index=row_idx
                     ))
                     
+                    all_processed.append((row_idx, ai_summary))
                     logger.debug(f"Processed project at row {row_idx}: {project_info.username}")
+                else:
+                    # Failed to extract project info, mark as not project related
+                    all_processed.append((row_idx, "Not new project related"))
+            else:
+                # Not a new project
+                all_processed.append((row_idx, "Not new project related"))
+                logger.debug(f"Row {row_idx} marked as not new project related")
         
-        return summaries
+        return summaries, all_processed
     
-    def write_summaries(self, summaries: List[ProjectSummary], ai_summary_col: int):
+    def write_summaries(self, all_processed: List[Tuple[int, str]], ai_summary_col: int, ai_processed_col: int):
         """
-        Write AI summaries to the sheet
+        Write AI summaries and AI processed status to the sheet
         
         Args:
-            summaries: List of project summaries
+            all_processed: List of (row_index, ai_summary) tuples for all processed rows
             ai_summary_col: Column index for AI Summary
+            ai_processed_col: Column index for AI processed
         """
-        if not summaries:
+        if not all_processed:
             return
         
         try:
@@ -563,20 +596,22 @@ class SheetAnalyzer:
             all_rows = self.sheets.get_sheet_data()
             
             # Ensure we have enough columns in each row
+            max_col = max(ai_summary_col, ai_processed_col)
             for row_idx in range(len(all_rows)):
-                while len(all_rows[row_idx]) <= ai_summary_col:
+                while len(all_rows[row_idx]) <= max_col:
                     all_rows[row_idx].append('')
             
-            # Update the AI summary column for each processed row
-            for summary in summaries:
-                if summary.row_index - 1 < len(all_rows):  # row_index is 1-based
-                    all_rows[summary.row_index - 1][ai_summary_col] = summary.ai_summary
+            # Update the AI summary and AI processed columns for each processed row
+            for row_index, ai_summary in all_processed:
+                if row_index - 1 < len(all_rows):  # row_index is 1-based
+                    all_rows[row_index - 1][ai_summary_col] = ai_summary
+                    all_rows[row_index - 1][ai_processed_col] = "TRUE"
             
             # Clear and rewrite the entire sheet
             self.sheets.clear_sheet(preserve_headers=False)
             self.sheets.append_data(all_rows)
             
-            logger.info(f"Written {len(summaries)} AI summaries to sheet")
+            logger.info(f"Written {len(all_processed)} AI summaries to sheet")
                 
         except Exception as e:
             logger.error(f"Error writing summaries: {e}")
@@ -624,21 +659,23 @@ class SheetAnalyzer:
         
         try:
             # Ensure columns exist
-            ai_summary_col, daily_draft_col = self.ensure_columns_exist()
+            ai_summary_col, ai_processed_col, daily_draft_col = self.ensure_columns_exist()
             
             # Analyze all rows
-            summaries = self.analyze_all_rows()
+            summaries, all_processed_rows = self.analyze_all_rows()
             
-            if summaries:
-                # Write individual summaries
-                self.write_summaries(summaries, ai_summary_col)
+            if all_processed_rows:
+                # Write all AI summaries (including "Not new project related")
+                self.write_summaries(all_processed_rows, ai_summary_col, ai_processed_col)
                 
-                # Generate and write daily draft
-                self.generate_and_write_daily_draft(summaries, daily_draft_col)
-                
-                logger.info(f"Daily analysis complete: {len(summaries)} projects processed")
+                # Generate and write daily draft only if there are actual projects
+                if summaries:
+                    self.generate_and_write_daily_draft(summaries, daily_draft_col)
+                    logger.info(f"Daily analysis complete: {len(all_processed_rows)} rows processed, {len(summaries)} new projects found")
+                else:
+                    logger.info(f"Daily analysis complete: {len(all_processed_rows)} rows processed, no new projects found")
             else:
-                logger.info("No new projects found in daily analysis")
+                logger.info("No rows to analyze")
                 
         except Exception as e:
             logger.error(f"Error in daily analysis: {e}")
