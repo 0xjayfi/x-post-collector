@@ -458,7 +458,7 @@ When you return to this project:
      Or implement Typefully API (below is an example)
    ```python
     import requests
-   API_KEY = "eNl4ryUZJmxFTOpr"
+   API_KEY = "XXXXXXXXXXXXXX"
    headers = {"X-API-KEY": f"Bearer {API_KEY}"}
    payload = {
       "content": f"""🚀 New/Trending Projects on 2025-08-11:
