@@ -10,7 +10,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import requests
 
 logger = logging.getLogger(__name__)
@@ -217,13 +217,13 @@ class TwitterAPIPublisher(XPublisher):
             logger.error(f"Authentication failed: {e}")
             return False
     
-    def _split_into_tweets(self, content: str, max_length: int = 280) -> List[str]:
+    def _split_into_tweets(self, content: str, max_length: int = 3800) -> List[str]:
         """
         Split long content into tweet-sized chunks
         
         Args:
             content: Content to split
-            max_length: Maximum length per tweet
+            max_length: Maximum length per tweet (I have X premium, so 3800)
             
         Returns:
             List of tweet-sized strings
@@ -519,6 +519,196 @@ class TypefullyPublisher(XPublisher):
             return PublishResult(
                 success=False,
                 error_msg=f"Unexpected error: {str(e)}"
+            )
+
+
+class SheetPublisher:
+    """Wrapper that publishes content and updates sheet with receipt"""
+    
+    def __init__(self, publisher: XPublisher, sheets_handler):
+        """
+        Initialize sheet publisher
+        
+        Args:
+            publisher: The underlying publisher (Twitter or Typefully)
+            sheets_handler: GoogleSheetsHandler instance
+        """
+        self.publisher = publisher
+        self.sheets = sheets_handler
+        self.publisher_type = type(publisher).__name__.replace('Publisher', '')
+        logger.info(f"Initialized SheetPublisher with {self.publisher_type}")
+    
+    def ensure_receipt_column(self) -> int:
+        """
+        Ensure Publication receipt column exists in sheet
+        
+        Returns:
+            Column index of Publication receipt
+        """
+        try:
+            # Get current headers
+            sheet_data = self.sheets.get_sheet_data()
+            headers = sheet_data[0] if sheet_data else []
+            
+            # Check for existing column
+            receipt_col = -1
+            for i, header in enumerate(headers):
+                if header == 'Publication receipt':
+                    receipt_col = i
+                    break
+            
+            # Add column if missing
+            if receipt_col == -1:
+                headers.append('Publication receipt')
+                receipt_col = len(headers) - 1
+                
+                # Update sheet headers
+                all_rows = self.sheets.get_sheet_data()
+                if all_rows:
+                    all_rows[0] = headers
+                else:
+                    all_rows = [headers]
+                
+                self.sheets.clear_sheet(preserve_headers=False)
+                self.sheets.append_data(all_rows)
+                logger.info("Added Publication receipt column to sheet")
+            
+            return receipt_col
+            
+        except Exception as e:
+            logger.error(f"Error ensuring receipt column: {e}")
+            return -1
+    
+    def update_receipt(self, row_index: int, result: PublishResult) -> bool:
+        """
+        Update sheet with publication receipt
+        
+        Args:
+            row_index: Row to update (1-based)
+            result: Publishing result
+            
+        Returns:
+            True if update successful
+        """
+        try:
+            receipt_col = self.ensure_receipt_column()
+            if receipt_col == -1:
+                return False
+            
+            # Get all sheet data
+            all_rows = self.sheets.get_sheet_data()
+            
+            # Ensure row exists and has enough columns
+            while len(all_rows) < row_index:
+                all_rows.append([])
+            
+            while len(all_rows[row_index - 1]) <= receipt_col:
+                all_rows[row_index - 1].append('')
+            
+            # Create receipt based on publisher type and result
+            if result.success:
+                if self.publisher_type == 'TwitterAPI':
+                    # For X API, use the tweet URL
+                    receipt = result.url if result.url else f"Tweet ID: {result.post_id}"
+                elif self.publisher_type == 'Typefully':
+                    # For Typefully, use the draft ID
+                    receipt = f"Typefully Draft: {result.post_id}" if result.post_id else result.url
+                else:
+                    receipt = f"Published: {result.post_id or 'Success'}"
+            else:
+                receipt = f"Failed: {result.error_msg}"
+            
+            # Update the specific cell
+            all_rows[row_index - 1][receipt_col] = receipt
+            
+            # Write back to sheet
+            self.sheets.clear_sheet(preserve_headers=False)
+            self.sheets.append_data(all_rows)
+            
+            logger.info(f"Updated row {row_index} with receipt: {receipt}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error updating receipt: {e}")
+            return False
+    
+    def publish_with_receipt(self, content: str, row_index: int = 2) -> PublishResult:
+        """
+        Publish content and update sheet with receipt
+        
+        Args:
+            content: Content to publish
+            row_index: Row to update with receipt (default: 2, first data row)
+            
+        Returns:
+            PublishResult object
+        """
+        # Publish content
+        result = self.publisher.publish(content)
+        
+        # Update sheet with receipt
+        self.update_receipt(row_index, result)
+        
+        return result
+    
+    def publish_from_sheet(self, row_index: int, draft_column: str = 'Daily Post Draft') -> PublishResult:
+        """
+        Read content from sheet and publish it
+        
+        Args:
+            row_index: Row to read from (1-based)
+            draft_column: Column name containing the draft
+            
+        Returns:
+            PublishResult object
+        """
+        try:
+            # Get sheet data
+            sheet_data = self.sheets.get_sheet_data()
+            
+            if len(sheet_data) < row_index:
+                return PublishResult(
+                    success=False,
+                    error_msg=f"Row {row_index} not found in sheet"
+                )
+            
+            # Find draft column
+            headers = sheet_data[0]
+            draft_col = -1
+            for i, header in enumerate(headers):
+                if header == draft_column:
+                    draft_col = i
+                    break
+            
+            if draft_col == -1:
+                return PublishResult(
+                    success=False,
+                    error_msg=f"Column '{draft_column}' not found"
+                )
+            
+            # Get content from the specified row
+            row_data = sheet_data[row_index - 1]
+            if len(row_data) <= draft_col:
+                return PublishResult(
+                    success=False,
+                    error_msg=f"No content in {draft_column} column for row {row_index}"
+                )
+            
+            content = row_data[draft_col]
+            if not content or not content.strip():
+                return PublishResult(
+                    success=False,
+                    error_msg="Draft content is empty"
+                )
+            
+            # Publish and update receipt
+            return self.publish_with_receipt(content, row_index)
+            
+        except Exception as e:
+            logger.error(f"Error publishing from sheet: {e}")
+            return PublishResult(
+                success=False,
+                error_msg=f"Error: {str(e)}"
             )
 
 

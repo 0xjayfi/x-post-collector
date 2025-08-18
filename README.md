@@ -52,7 +52,9 @@ A Python automation tool that collects Twitter/X posts from Discord channels and
    - ✅ Rate limiting for free tier (1500 requests/day, 15/minute)
    - ✅ Batch processing for API efficiency
    - ✅ Daily draft generation with structured format
-   - ✅ Automatic column creation (AI Summary, Daily Post Draft)
+   - ✅ Automatic column creation (AI Summary, AI processed, Daily Post Draft)
+   - ✅ Non-project posts marked as "Not new project related"
+   - ✅ AI processed column tracks all analyzed rows with "TRUE" value
    - ✅ Integration test script with dry-run mode
    - ✅ Fixed sheet update logic for proper column creation
 
@@ -60,11 +62,15 @@ A Python automation tool that collects Twitter/X posts from Discord channels and
    - ✅ X API v2 authentication with OAuth 2.0
    - ✅ Tweet publishing with automatic thread creation for long content
    - ✅ Rate limiting (50 posts/day, 5 posts/15min)
-   - ✅ Typefully API support as alternative
+   - ✅ Typefully API support with UTC time scheduling
    - ✅ Content validation and formatting
    - ✅ Automatic hashtag addition
    - ✅ Error handling with detailed diagnostics
-   - ✅ Test script for permission validation (`test_x_api.py`)
+   - ✅ SheetPublisher wrapper for Google Sheets integration
+   - ✅ Automatic "Publication receipt" column creation
+   - ✅ Receipt tracking (tweet URLs for X API, draft IDs for Typefully)
+   - ✅ Direct publishing from "Daily Post Draft" column
+   - ✅ Test scripts: `test_x_api.py` (authentication), `test_sheet_publishing.py` (sheet integration)
 
 ### 🔄 In Progress / Next Steps
 
@@ -107,6 +113,7 @@ discord-to-sheets/
 ├── test_sheets_integration.py  ✅ Google Sheets upload testing
 ├── test_gemini_integration.py  ✅ Gemini AI analyzer testing
 ├── test_x_api.py              ✅ X API authentication & permission testing
+├── test_sheet_publishing.py   ✅ Sheet-based publishing with receipt tracking
 ├── run_tests.py               ✅ Test runner utility
 ├── plan.md                    ✅ Implementation plans & X API setup guide
 └── README.md                  ✅ This file
@@ -142,6 +149,10 @@ X_API_KEY=your_x_api_key
 X_API_SECRET=your_x_api_secret
 X_ACCESS_TOKEN=your_x_access_token
 X_ACCESS_TOKEN_SECRET=your_x_access_token_secret
+
+# Typefully API Configuration (alternative to X API)
+TYPEFULLY_API_KEY=your_typefully_api_key  # Optional
+TYPEFULLY_HOURS_DELAY=8  # Schedule posts X hours from now
 
 # Publishing Configuration
 PUBLISHER_TYPE=twitter  # 'twitter' or 'typefully'
@@ -210,6 +221,34 @@ For detailed instructions, see [plan.md](./plan.md)
 
 For detailed X API setup, see [plan.md](./plan.md)
 
+### Publishing Workflow
+
+1. **Test Publishing from Sheet**
+   ```bash
+   ./venv/bin/python test_sheet_publishing.py
+   ```
+   - Interactive script that reads "Daily Post Draft" from your Google Sheet
+   - Choose between X API (immediate) or Typefully (scheduled)
+   - Automatically updates "Publication receipt" column with:
+     - X API: Tweet URL (e.g., `https://twitter.com/username/status/123`)
+     - Typefully: Draft ID (e.g., `Typefully Draft: abc123`)
+
+2. **Using in Code**
+   ```python
+   from modules.x_publisher import create_publisher, SheetPublisher
+   from modules.sheets_handler import GoogleSheetsHandler
+   
+   # Create publisher (X API or Typefully)
+   publisher = create_publisher('twitter', **credentials)
+   
+   # Wrap with SheetPublisher for receipt tracking
+   sheets = GoogleSheetsHandler(credentials_path, sheet_id)
+   sheet_publisher = SheetPublisher(publisher, sheets)
+   
+   # Publish from specific row
+   result = sheet_publisher.publish_from_sheet(row_number=2)
+   ```
+
 ## 🧪 Testing
 
 ### Run All Tests
@@ -239,6 +278,9 @@ python run_tests.py integration
 
 # X API Integration (Requires X API credentials)
 ./venv/bin/python test_x_api.py
+
+# Sheet Publishing Integration (Publishes from Google Sheet)
+./venv/bin/python test_sheet_publishing.py
 ```
 
 ### Generate CSV Exports for Inspection
@@ -309,17 +351,29 @@ Description: ""Arc is an open Layer-1 blockchain purpose-built for stablecoin fi
 - Duplicate detection via date checking
 - Support for large datasets (tested with 1000+ rows)
 
-### 5. AI-Powered Analysis (New!)
+### 5. AI-Powered Analysis
 - Gemini AI integration for crypto project detection
 - Automatic identification of new Web3/DeFi/NFT projects
 - Twitter/X username and link extraction from embedded content
 - AI-generated project summaries (concise 1-2 sentences)
 - Daily draft creation with formatted project list
 - Smart rate limiting for free tier usage
+- Non-project posts marked as "Not new project related"
+- AI processed column tracks all analyzed rows
 
-### 6. Testing & Validation
+### 6. X/Twitter Publishing
+- X API v2 integration with OAuth 2.0 authentication
+- Automatic thread creation for long content
+- Typefully API support for scheduled posting
+- SheetPublisher wrapper for Google Sheets integration
+- Automatic "Publication receipt" column creation
+- Receipt tracking (tweet URLs for X API, draft IDs for Typefully)
+- Direct publishing from "Daily Post Draft" column in sheet
+
+### 7. Testing & Validation
 - 46 unit tests total (16 Discord + 12 Sheets + 18 Gemini)
 - Integration tests for Discord, Google Sheets, Gemini AI, and X API
+- Sheet publishing test with interactive mode
 - CSV export for manual data inspection
 - Test coverage for edge cases and error scenarios
 - X API permission diagnostic tool
@@ -448,5 +502,5 @@ Private project - All rights reserved
 
 ---
 
-*Last Updated: 2025-08-16 by Claude (AI Assistant)*  
-*Session Summary: Implemented X API publisher module with OAuth 2.0 authentication, automatic thread creation for long content, rate limiting, and permission diagnostic tools. Fixed Gemini analyzer sheet update logic and added comprehensive X API setup documentation.*
+*Last Updated: 2025-08-17 by Claude (AI Assistant)*  
+*Session Summary: Enhanced Gemini analyzer with AI processed column and non-project tracking. Added SheetPublisher wrapper for X API/Typefully with automatic Publication receipt column creation. Implemented direct publishing from Google Sheet with receipt tracking (tweet URLs for X API, draft IDs for Typefully). Created comprehensive test script for sheet-based publishing workflow.*
