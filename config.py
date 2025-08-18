@@ -54,6 +54,48 @@ def validate_config() -> bool:
     
     return True
 
+def validate_x_api_config() -> bool:
+    """Validate X API configuration if using Twitter publisher."""
+    if PUBLISHER_TYPE.lower() != 'twitter':
+        return True  # Not using Twitter, no validation needed
+    
+    required_x_vars = {
+        'X_API_KEY': X_API_KEY,
+        'X_API_SECRET': X_API_SECRET,
+        'X_ACCESS_TOKEN': X_ACCESS_TOKEN,
+        'X_ACCESS_TOKEN_SECRET': X_ACCESS_TOKEN_SECRET
+    }
+    
+    missing_x_vars = []
+    for var_name, var_value in required_x_vars.items():
+        if not var_value or var_value.startswith('your_'):
+            missing_x_vars.append(var_name)
+    
+    if missing_x_vars:
+        print(f"Missing or invalid X API configuration for: {', '.join(missing_x_vars)}")
+        print("Please update your .env file with valid X API credentials.")
+        return False
+    
+    return True
+
+def validate_typefully_config() -> bool:
+    """Validate Typefully API configuration if using Typefully publisher."""
+    if PUBLISHER_TYPE.lower() != 'typefully':
+        return True  # Not using Typefully, no validation needed
+    
+    if not TYPEFULLY_API_KEY or TYPEFULLY_API_KEY.startswith('your_'):
+        print("Missing or invalid Typefully API key")
+        print("Please update your .env file with valid Typefully API key.")
+        return False
+    
+    # Validate hours delay is a reasonable number
+    if TYPEFULLY_HOURS_DELAY < 0 or TYPEFULLY_HOURS_DELAY > 168:  # Max 1 week
+        print(f"Invalid TYPEFULLY_HOURS_DELAY: {TYPEFULLY_HOURS_DELAY}")
+        print("Please set a value between 0 and 168 hours (1 week)")
+        return False
+    
+    return True
+
 # Application Configuration
 APP_NAME = "Discord to Google Sheets Bot"
 VERSION = "1.0.0"
@@ -77,3 +119,26 @@ SHEET_HEADERS = [
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 BATCH_SIZE = 100  # Maximum messages to process at once
+
+# Gemini AI Configuration
+GEMINI_API_KEY: Optional[str] = os.getenv('GEMINI_API_KEY')
+GEMINI_MODEL: str = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
+GEMINI_DAILY_LIMIT: int = int(os.getenv('GEMINI_DAILY_LIMIT', '1400'))
+
+# X API Configuration
+X_API_KEY: Optional[str] = os.getenv('X_API_KEY')
+X_API_SECRET: Optional[str] = os.getenv('X_API_SECRET')
+X_ACCESS_TOKEN: Optional[str] = os.getenv('X_ACCESS_TOKEN')
+X_ACCESS_TOKEN_SECRET: Optional[str] = os.getenv('X_ACCESS_TOKEN_SECRET')
+
+# Publishing Configuration
+PUBLISHER_TYPE: str = os.getenv('PUBLISHER_TYPE', 'twitter')  # 'twitter' or 'typefully'
+
+# Typefully Configuration (alternative to X API)
+TYPEFULLY_API_KEY: Optional[str] = os.getenv('TYPEFULLY_API_KEY')
+TYPEFULLY_SCHEDULE: str = os.getenv('TYPEFULLY_SCHEDULE', 'next-free-slot')  # 'next-free-slot' or hours like '2h', '4h', '8h'
+TYPEFULLY_HOURS_DELAY: int = int(os.getenv('TYPEFULLY_HOURS_DELAY', '0'))  # If > 0, schedule X hours from now
+
+# Archive Configuration
+ARCHIVE_SHEET_NAME: str = os.getenv('ARCHIVE_SHEET_NAME', 'Archive')
+ARCHIVE_BATCH_SIZE: int = int(os.getenv('ARCHIVE_BATCH_SIZE', '50'))
