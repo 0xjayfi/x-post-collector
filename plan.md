@@ -992,52 +992,74 @@ def format_for_publishing(daily_draft: str) -> str:
 
 ## Part 2: Archive System Module
 
+### Overview
+Simple archive module that moves processed posts from Sheet1 to Archives sheet based on the "AI processed" column flag. This module runs after AI analysis and publishing are complete, archiving only the posts that have been fully processed.
+
+### Key Features
+- Archives only posts marked with AI processed = TRUE
+- Preserves essential post data while removing processing artifacts
+- Adds timestamp and publication receipt to archived posts
+- Cleans up Sheet1 by removing archived rows and clearing temporary columns
+- No external API dependencies - works solely with Google Sheets
+
 ### Module Structure
 ```
 modules/archive_handler.py
 ├── Class: ArchiveHandler
 │   ├── __init__(sheets_handler: GoogleSheetsHandler)
 │   ├── ensure_archive_sheet_exists() → bool
-│   ├── add_metadata_columns() → None
-│   ├── archive_processed_posts(metadata: Dict) → int
-│   ├── clear_processed_from_source() → bool
-│   └── rollback_on_failure() → bool
-│
-└── Data Classes:
-    └── ArchiveMetadata(date_processed, x_post_url, status, error_msg)
+│   ├── get_processed_posts() → List[Dict]
+│   ├── archive_posts(posts: List[Dict]) → int
+│   ├── clear_archived_rows(row_indices: List[int]) → bool
+│   └── clear_processing_columns() → bool
 ```
+
+### Archive Logic Flow
+1. Check "AI processed" column - only archive rows where value is TRUE
+2. Extract only required columns from processed posts:
+   - date, time, author, post_link, content, AI Summary
+3. Add metadata columns for Archives:
+   - Date Processed: Current timestamp when archiving
+   - Publication Receipt: Copy from original "Publication receipt" column
+4. After successful archiving:
+   - Delete archived rows from Sheet1
+   - Clear content from processing columns for remaining rows:
+     - AI Summary
+     - AI processed  
+     - Daily Post Draft
+     - Publication receipt
 
 ### Archive Sheet Structure
 ```
-Archive Sheet Columns:
+Archives Sheet Columns:
 - date (from original)
 - time (from original)
 - author (from original)
 - post_link (from original)
 - content (from original)
-- author_link (from original)
-- AI Summary (from processing)
-- Date Processed (NEW - timestamp)
-- X Post URL (NEW - published tweet URL)
-- Processing Status (NEW - success/failed/skipped)
-- Error Message (NEW - if failed)
+- AI Summary (from original)
+- Date Processed (NEW - timestamp when archived)
+- Publication Receipt (from original Publication receipt column)
 ```
 
 ### Implementation
 ```python
 from datetime import datetime
 from typing import List, Dict, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ArchiveHandler:
     def __init__(self, sheets_handler: GoogleSheetsHandler):
         self.sheets = sheets_handler
-        self.archive_sheet_name = "Archive"
+        self.archive_sheet_name = "Archives"
         self.source_sheet_name = "Sheet1"
     
     def ensure_archive_sheet_exists(self) -> bool:
-        """Create Archive sheet if it doesn't exist"""
+        """Create Archives sheet if it doesn't exist"""
         try:
-            # Check if Archive sheet exists
+            # Check if Archives sheet exists
             sheet_metadata = self.sheets.get_sheet_metadata()
             sheet_names = [sheet['properties']['title'] 
                           for sheet in sheet_metadata['sheets']]
@@ -1049,201 +1071,284 @@ class ArchiveHandler:
                 # Add headers
                 headers = [
                     'date', 'time', 'author', 'post_link', 
-                    'content', 'author_link', 'AI Summary',
-                    'Date Processed', 'X Post URL', 
-                    'Processing Status', 'Error Message'
+                    'content', 'AI Summary',
+                    'Date Processed', 'Publication Receipt'
                 ]
                 self.sheets.append_data([headers], self.archive_sheet_name)
-                logger.info(f"Created Archive sheet with headers")
+                logger.info(f"Created Archives sheet with headers")
                 
             return True
         except Exception as e:
             logger.error(f"Failed to ensure archive sheet: {e}")
             return False
     
-    def archive_processed_posts(self, 
-                               x_post_url: Optional[str] = None,
-                               status: str = "success") -> int:
+    def get_processed_posts(self) -> List[Dict]:
         """
-        Move posts with AI summaries to Archive sheet
+        Get all posts where AI processed = TRUE
         
         Returns:
-            Number of posts archived
+            List of dictionaries with post data and row indices
         """
         try:
             # Read all data from Sheet1
             source_data = self.sheets.get_sheet_data(self.source_sheet_name)
             
             if len(source_data) <= 1:
-                logger.info("No data to archive")
-                return 0
+                return []
             
             headers = source_data[0]
             data_rows = source_data[1:]
             
-            # Find AI Summary column
-            ai_summary_idx = headers.index('AI Summary') if 'AI Summary' in headers else -1
+            # Find required column indices
+            ai_processed_idx = headers.index('AI processed') if 'AI processed' in headers else -1
             
-            if ai_summary_idx == -1:
-                logger.warning("AI Summary column not found")
-                return 0
+            if ai_processed_idx == -1:
+                logger.warning("AI processed column not found")
+                return []
             
-            # Separate processed and unprocessed
-            processed_rows = []
-            unprocessed_rows = []
+            # Collect processed posts
+            processed_posts = []
             
-            for row in data_rows:
+            for idx, row in enumerate(data_rows, start=2):  # Start from row 2 (after header)
                 # Ensure row has enough columns
-                while len(row) <= ai_summary_idx:
+                while len(row) <= ai_processed_idx:
                     row.append('')
                 
-                if row[ai_summary_idx]:  # Has AI summary
-                    # Add metadata
-                    archived_row = row.copy()
-                    archived_row.extend([
-                        datetime.now().isoformat(),  # Date Processed
-                        x_post_url or '',  # X Post URL
-                        status,  # Processing Status
-                        ''  # Error Message
-                    ])
-                    processed_rows.append(archived_row)
-                else:
-                    unprocessed_rows.append(row)
+                # Check if AI processed = TRUE
+                if row[ai_processed_idx] and row[ai_processed_idx].upper() == 'TRUE':
+                    post_data = {
+                        'row_index': idx,
+                        'data': row,
+                        'headers': headers
+                    }
+                    processed_posts.append(post_data)
             
-            if processed_rows:
-                # Append to Archive sheet
-                self.sheets.append_data(processed_rows, self.archive_sheet_name)
-                logger.info(f"Archived {len(processed_rows)} posts")
-                
-                # Update Sheet1 with only unprocessed rows
-                self.sheets.clear_sheet(self.source_sheet_name, preserve_headers=True)
-                if unprocessed_rows:
-                    self.sheets.append_data(unprocessed_rows, self.source_sheet_name)
-                
-                return len(processed_rows)
+            return processed_posts
             
+        except Exception as e:
+            logger.error(f"Failed to get processed posts: {e}")
+            return []
+    
+    def archive_posts(self, posts: List[Dict]) -> int:
+        """
+        Archive the processed posts to Archives sheet
+        
+        Args:
+            posts: List of post dictionaries from get_processed_posts()
+        
+        Returns:
+            Number of posts archived
+        """
+        if not posts:
             return 0
+            
+        try:
+            archived_rows = []
+            
+            for post in posts:
+                headers = post['headers']
+                row = post['data']
+                
+                # Find column indices for required data
+                date_idx = headers.index('date') if 'date' in headers else -1
+                time_idx = headers.index('time') if 'time' in headers else -1
+                author_idx = headers.index('author') if 'author' in headers else -1
+                post_link_idx = headers.index('post_link') if 'post_link' in headers else -1
+                content_idx = headers.index('content') if 'content' in headers else -1
+                ai_summary_idx = headers.index('AI Summary') if 'AI Summary' in headers else -1
+                publication_receipt_idx = headers.index('Publication receipt') if 'Publication receipt' in headers else -1
+                
+                # Build archive row with only required columns
+                archive_row = [
+                    row[date_idx] if date_idx >= 0 and len(row) > date_idx else '',
+                    row[time_idx] if time_idx >= 0 and len(row) > time_idx else '',
+                    row[author_idx] if author_idx >= 0 and len(row) > author_idx else '',
+                    row[post_link_idx] if post_link_idx >= 0 and len(row) > post_link_idx else '',
+                    row[content_idx] if content_idx >= 0 and len(row) > content_idx else '',
+                    row[ai_summary_idx] if ai_summary_idx >= 0 and len(row) > ai_summary_idx else '',
+                    datetime.now().isoformat(),  # Date Processed
+                    row[publication_receipt_idx] if publication_receipt_idx >= 0 and len(row) > publication_receipt_idx else ''  # Publication Receipt
+                ]
+                
+                archived_rows.append(archive_row)
+            
+            if archived_rows:
+                # Append to Archives sheet
+                self.sheets.append_data(archived_rows, self.archive_sheet_name)
+                logger.info(f"Archived {len(archived_rows)} posts to Archives sheet")
+                
+            return len(archived_rows)
             
         except Exception as e:
             logger.error(f"Failed to archive posts: {e}")
             raise
     
-    def clear_daily_draft_column(self) -> bool:
-        """Clear the Daily Post Draft column after publishing"""
+    def clear_archived_rows(self, row_indices: List[int]) -> bool:
+        """
+        Remove archived rows from Sheet1
+        
+        Args:
+            row_indices: List of row numbers to delete (1-based)
+        """
+        try:
+            # Read current data
+            source_data = self.sheets.get_sheet_data(self.source_sheet_name)
+            
+            # Keep header and unarchived rows
+            new_data = [source_data[0]]  # Keep header
+            
+            for idx, row in enumerate(source_data[1:], start=2):
+                if idx not in row_indices:
+                    new_data.append(row)
+            
+            # Rewrite the sheet
+            self.sheets.clear_sheet(self.source_sheet_name, preserve_headers=False)
+            self.sheets.append_data(new_data, self.source_sheet_name)
+            
+            logger.info(f"Removed {len(row_indices)} archived rows from Sheet1")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to clear archived rows: {e}")
+            return False
+    
+    def clear_processing_columns(self) -> bool:
+        """
+        Clear content from processing columns:
+        - AI Summary
+        - AI processed
+        - Daily Post Draft
+        - Publication receipt
+        """
         try:
             # Read current data
             data = self.sheets.get_sheet_data(self.source_sheet_name)
+            if len(data) <= 1:
+                return True  # No data to clear
+                
             headers = data[0]
             
-            # Find Daily Post Draft column
-            draft_col_idx = headers.index('Daily Post Draft') if 'Daily Post Draft' in headers else -1
+            # Find column indices to clear
+            columns_to_clear = ['AI Summary', 'AI processed', 'Daily Post Draft', 'Publication receipt']
+            clear_indices = []
             
-            if draft_col_idx >= 0:
-                # Clear the column (except header)
-                for i in range(1, len(data)):
-                    if len(data[i]) > draft_col_idx:
-                        data[i][draft_col_idx] = ''
-                
-                # Rewrite the sheet
-                self.sheets.clear_sheet(self.source_sheet_name, preserve_headers=False)
-                self.sheets.append_data(data, self.source_sheet_name)
-                
-                logger.info("Cleared Daily Post Draft column")
-                return True
+            for col_name in columns_to_clear:
+                if col_name in headers:
+                    clear_indices.append(headers.index(col_name))
             
-            return False
+            # Clear the columns (except header)
+            for i in range(1, len(data)):
+                for col_idx in clear_indices:
+                    if len(data[i]) > col_idx:
+                        data[i][col_idx] = ''
+            
+            # Rewrite the sheet
+            self.sheets.clear_sheet(self.source_sheet_name, preserve_headers=False)
+            self.sheets.append_data(data, self.source_sheet_name)
+            
+            logger.info(f"Cleared processing columns: {columns_to_clear}")
+            return True
             
         except Exception as e:
-            logger.error(f"Failed to clear draft column: {e}")
+            logger.error(f"Failed to clear processing columns: {e}")
             return False
-```
-
-## Part 3: Workflow Integration
-
-### Main Workflow Orchestrator
-```python
-# modules/workflow_orchestrator.py
-
-class WorkflowOrchestrator:
-    def __init__(self, sheets_handler, gemini_analyzer, publisher, archive_handler):
-        self.sheets = sheets_handler
-        self.gemini = gemini_analyzer
-        self.publisher = publisher
-        self.archiver = archive_handler
     
-    def run_complete_workflow(self) -> Dict:
+    def run_archive_workflow(self) -> Dict:
         """
-        Complete workflow: Analyze → Publish → Archive
+        Complete archive workflow:
+        1. Get processed posts (AI processed = TRUE)
+        2. Archive them to Archives sheet
+        3. Remove archived rows from Sheet1
+        4. Clear processing columns for remaining rows
+        
+        Returns:
+            Dictionary with results
         """
         results = {
-            'analysis': False,
-            'publishing': False,
-            'archiving': False,
-            'posts_processed': 0,
-            'x_post_url': None,
+            'success': False,
+            'posts_archived': 0,
             'errors': []
         }
         
         try:
-            # Step 1: Run Gemini Analysis
-            logger.info("Starting AI analysis...")
-            analyzer = SheetAnalyzer(self.sheets, self.gemini)
-            analyzer.run_daily_analysis()
-            results['analysis'] = True
+            # Ensure archive sheet exists
+            if not self.ensure_archive_sheet_exists():
+                results['errors'].append("Failed to ensure Archives sheet exists")
+                return results
             
-            # Step 2: Read Daily Draft
-            daily_draft = self._get_daily_draft()
+            # Get posts to archive
+            processed_posts = self.get_processed_posts()
             
-            if daily_draft:
-                # Step 3: Publish to X
-                logger.info("Publishing to X...")
-                publish_result = self.publisher.publish(daily_draft)
+            if not processed_posts:
+                logger.info("No posts to archive (no posts with AI processed = TRUE)")
+                results['success'] = True
+                return results
+            
+            logger.info(f"Found {len(processed_posts)} posts to archive")
+            
+            # Archive the posts
+            archived_count = self.archive_posts(processed_posts)
+            results['posts_archived'] = archived_count
+            
+            if archived_count > 0:
+                # Get row indices to delete
+                row_indices = [post['row_index'] for post in processed_posts]
                 
-                if publish_result.success:
-                    results['publishing'] = True
-                    results['x_post_url'] = publish_result.url
-                    logger.info(f"Published: {publish_result.url}")
+                # Remove archived rows from Sheet1
+                if self.clear_archived_rows(row_indices):
+                    logger.info("Successfully removed archived rows from Sheet1")
                 else:
-                    results['errors'].append(f"Publishing failed: {publish_result.error_msg}")
+                    results['errors'].append("Failed to remove archived rows")
+                
+                # Clear processing columns for remaining rows
+                if self.clear_processing_columns():
+                    logger.info("Successfully cleared processing columns")
+                else:
+                    results['errors'].append("Failed to clear processing columns")
             
-            # Step 4: Archive Processed Posts
-            logger.info("Archiving processed posts...")
-            posts_archived = self.archiver.archive_processed_posts(
-                x_post_url=results['x_post_url'],
-                status='success' if results['publishing'] else 'analysis_only'
-            )
-            
-            results['archiving'] = True
-            results['posts_processed'] = posts_archived
-            
-            # Step 5: Clear daily draft column
-            self.archiver.clear_daily_draft_column()
-            
-            logger.info(f"Workflow complete: {posts_archived} posts processed")
+            results['success'] = len(results['errors']) == 0
             
         except Exception as e:
-            logger.error(f"Workflow failed: {e}")
+            logger.error(f"Archive workflow failed: {e}")
             results['errors'].append(str(e))
         
         return results
-    
-    def _get_daily_draft(self) -> Optional[str]:
-        """Get the daily draft from Sheet1"""
-        try:
-            data = self.sheets.get_sheet_data()
-            headers = data[0]
-            
-            draft_col_idx = headers.index('Daily Post Draft') if 'Daily Post Draft' in headers else -1
-            
-            if draft_col_idx >= 0 and len(data) > 1:
-                # Check first data row for draft
-                if len(data[1]) > draft_col_idx:
-                    return data[1][draft_col_idx]
-            
-            return None
-        except Exception as e:
-            logger.error(f"Failed to get daily draft: {e}")
-            return None
+```
+
+## Part 3: Usage Example
+
+### Basic Archive Usage
+```python
+from modules.sheets_handler import GoogleSheetsHandler
+from modules.archive_handler import ArchiveHandler
+
+# Initialize sheets handler
+sheets_handler = GoogleSheetsHandler(
+    credentials_path='credentials.json',
+    sheet_id=GOOGLE_SHEET_ID
+)
+
+# Initialize archive handler
+archive_handler = ArchiveHandler(sheets_handler)
+
+# Run the archive workflow
+results = archive_handler.run_archive_workflow()
+
+if results['success']:
+    print(f"Successfully archived {results['posts_archived']} posts")
+else:
+    print(f"Archive failed: {results['errors']}")
+```
+
+### Integration with Full Pipeline
+```python
+# After running Gemini analysis and publishing...
+
+# Archive processed posts
+archive_handler = ArchiveHandler(sheets_handler)
+archive_results = archive_handler.run_archive_workflow()
+
+print(f"Archived {archive_results['posts_archived']} posts to Archives sheet")
 ```
 
 ## Part 4: Error Handling & Recovery
@@ -1361,57 +1466,98 @@ ARCHIVE_SHEET_NAME = os.getenv('ARCHIVE_SHEET_NAME', 'Archive')
 ARCHIVE_BATCH_SIZE = int(os.getenv('ARCHIVE_BATCH_SIZE', '50'))
 ```
 
-## Part 6: Testing Strategy
+## Testing Strategy
 
-### Unit Tests
+### Unit Tests for Archive Module
 ```python
-# tests/test_x_publisher.py
-class TestXPublisher(unittest.TestCase):
-    def test_content_validation(self):
-        """Test content length validation"""
-        
-    def test_tweet_splitting(self):
-        """Test splitting long content into threads"""
-        
-    def test_rate_limiting(self):
-        """Test rate limit detection"""
-
 # tests/test_archive_handler.py
+import unittest
+from unittest.mock import Mock, MagicMock
+from modules.archive_handler import ArchiveHandler
+
 class TestArchiveHandler(unittest.TestCase):
-    def test_archive_creation(self):
-        """Test Archive sheet creation"""
+    
+    def test_get_processed_posts(self):
+        """Test getting posts where AI processed = TRUE"""
+        mock_sheets = Mock()
+        mock_sheets.get_sheet_data.return_value = [
+            ['date', 'time', 'author', 'post_link', 'content', 'AI processed'],
+            ['2024-01-15', '10:00', 'user1', 'link1', 'content1', 'TRUE'],
+            ['2024-01-15', '11:00', 'user2', 'link2', 'content2', 'FALSE'],
+            ['2024-01-15', '12:00', 'user3', 'link3', 'content3', 'TRUE']
+        ]
         
-    def test_metadata_addition(self):
-        """Test adding metadata columns"""
+        handler = ArchiveHandler(mock_sheets)
+        posts = handler.get_processed_posts()
         
-    def test_rollback(self):
-        """Test rollback on failure"""
+        # Should only get 2 posts with TRUE
+        self.assertEqual(len(posts), 2)
+        self.assertEqual(posts[0]['row_index'], 2)
+        self.assertEqual(posts[1]['row_index'], 4)
+    
+    def test_archive_posts(self):
+        """Test archiving posts to Archives sheet"""
+        mock_sheets = Mock()
+        handler = ArchiveHandler(mock_sheets)
+        
+        test_posts = [
+            {
+                'row_index': 2,
+                'headers': ['date', 'time', 'author', 'post_link', 'content', 
+                           'AI Summary', 'Publication receipt'],
+                'data': ['2024-01-15', '10:00', 'user1', 'link1', 
+                        'content1', 'Summary1', 'tweet_url_1']
+            }
+        ]
+        
+        count = handler.archive_posts(test_posts)
+        
+        self.assertEqual(count, 1)
+        mock_sheets.append_data.assert_called_once()
+    
+    def test_clear_processing_columns(self):
+        """Test clearing processing columns"""
+        mock_sheets = Mock()
+        mock_sheets.get_sheet_data.return_value = [
+            ['date', 'time', 'AI Summary', 'AI processed', 'Daily Post Draft'],
+            ['2024-01-15', '10:00', 'Summary1', 'TRUE', 'Draft1'],
+            ['2024-01-15', '11:00', 'Summary2', 'TRUE', 'Draft2']
+        ]
+        
+        handler = ArchiveHandler(mock_sheets)
+        result = handler.clear_processing_columns()
+        
+        self.assertTrue(result)
+        # Verify clear and append were called
+        mock_sheets.clear_sheet.assert_called_once()
+        mock_sheets.append_data.assert_called_once()
 ```
 
 ### Integration Test Script
 ```python
-# test_publishing_integration.py
-def test_complete_workflow():
-    """Test the complete publishing and archiving workflow"""
+# test_archive_integration.py
+def test_archive_workflow():
+    """Test the complete archive workflow"""
     
-    # 1. Create test data in Sheet1
-    # 2. Run AI analysis
-    # 3. Publish draft (to test account)
-    # 4. Archive processed posts
-    # 5. Verify Archive sheet
-    # 6. Verify Sheet1 cleared
+    # 1. Create test data in Sheet1 with AI processed = TRUE
+    # 2. Run archive workflow
+    # 3. Verify data moved to Archives sheet
+    # 4. Verify archived rows removed from Sheet1
+    # 5. Verify processing columns cleared
+    # 6. Check Archives sheet has correct structure
 ```
 
-## Success Criteria
+## Success Criteria for Archive Module
 
-- [ ] Successfully authenticate with X/Typefully API
-- [ ] Publish daily draft without errors
-- [ ] Archive processed posts with metadata
-- [ ] Clear processed posts from Sheet1
-- [ ] Handle API rate limits gracefully
-- [ ] Rollback on failure without data loss
-- [ ] Complete workflow in < 60 seconds
-- [ ] Maintain data integrity throughout
+- [ ] Successfully detect posts with AI processed = TRUE
+- [ ] Create Archives sheet if it doesn't exist
+- [ ] Archive only the specified columns to Archives sheet
+- [ ] Add Date Processed timestamp correctly
+- [ ] Copy Publication Receipt from original column
+- [ ] Remove archived rows from Sheet1 completely
+- [ ] Clear processing columns for remaining rows
+- [ ] Complete archive workflow without data loss
+- [ ] Handle errors gracefully with proper logging
 
 ## Security Considerations
 
