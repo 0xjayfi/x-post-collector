@@ -19,6 +19,14 @@ SHEETS_BATCH_SIZE: int = int(os.getenv('SHEETS_BATCH_SIZE', '100'))
 
 # Schedule Configuration
 SCHEDULE_TIME: str = os.getenv('SCHEDULE_TIME', '20:00')
+SCHEDULE_TIMEZONE: Optional[str] = os.getenv('SCHEDULE_TIMEZONE')  # Optional timezone (e.g., 'UTC', 'US/Eastern')
+
+# Discord Data Collection Configuration
+DISCORD_COLLECTION_MODE: str = os.getenv('DISCORD_COLLECTION_MODE', 'daily')  # 'daily', 'hours', or 'since_last'
+DISCORD_LOOKBACK_HOURS: int = int(os.getenv('DISCORD_LOOKBACK_HOURS', '24'))
+DISCORD_LOOKBACK_DAYS: int = int(os.getenv('DISCORD_LOOKBACK_DAYS', '1'))
+DISCORD_FETCH_LIMIT: int = int(os.getenv('DISCORD_FETCH_LIMIT', '200'))
+DISCORD_SKIP_DUPLICATES: str = os.getenv('DISCORD_SKIP_DUPLICATES', 'true')
 
 # Logging Configuration
 LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
