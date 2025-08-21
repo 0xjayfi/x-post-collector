@@ -44,8 +44,11 @@ main.py                       # Entry point that uses scheduler
 
 1. **Discord Data Collection**
    - Connect to Discord using DiscordHandler
-   - Fetch posts based on configured time window
-   - Handle duplicate detection using last entry date from Sheets
+   - Fetch posts based on configured time window:
+     - `daily` mode: Fetch posts from last N days
+     - `hours` mode: Fetch posts from last N hours  
+     - `since_last` mode: Fetch posts since last entry in Google Sheets
+   - Handle duplicate detection using last entry date from Sheets (if DISCORD_SKIP_DUPLICATES=true)
    - Process Twitter/X links from messages
 
 2. **Google Sheets Integration**
@@ -96,6 +99,13 @@ GOOGLE_SERVICE_ACCOUNT_FILE=credentials.json
 # Scheduling
 SCHEDULE_TIME=20:00  # 24-hour format
 
+# Discord Data Collection Time Window
+DISCORD_COLLECTION_MODE=daily      # Options: 'daily', 'hours', 'since_last'
+DISCORD_LOOKBACK_HOURS=24          # For 'hours' mode: how many hours to look back
+DISCORD_LOOKBACK_DAYS=1            # For 'daily' mode: how many days to look back
+DISCORD_FETCH_LIMIT=200            # Max messages to fetch per run
+DISCORD_SKIP_DUPLICATES=true       # Check sheets for existing posts before uploading
+
 # Optional: Gemini AI
 GEMINI_API_KEY=...
 
@@ -104,10 +114,6 @@ PUBLISHER_TYPE=twitter  # or 'typefully'
 X_API_KEY=...           # If using Twitter
 # OR
 TYPEFULLY_API_KEY=...   # If using Typefully
-
-# Data Collection Settings
-DISCORD_FETCH_LIMIT=200     # Messages to fetch per run
-DISCORD_LOOKBACK_DAYS=1     # Days to look back for messages
 ```
 
 ## Implementation Flow
@@ -131,7 +137,11 @@ DISCORD_LOOKBACK_DAYS=1     # Days to look back for messages
 ### Pipeline Execution Steps:
 1. **Data Collection Phase**
    - Connect to Discord
-   - Fetch messages from channel
+   - Determine time window based on DISCORD_COLLECTION_MODE:
+     - `daily`: Use datetime.now() - timedelta(days=DISCORD_LOOKBACK_DAYS)
+     - `hours`: Use datetime.now() - timedelta(hours=DISCORD_LOOKBACK_HOURS)
+     - `since_last`: Query Google Sheets for last entry timestamp
+   - Fetch messages from channel within time window
    - Filter for Twitter/X links
    - Format as TwitterPost objects
    - Disconnect from Discord
@@ -298,15 +308,33 @@ LOG_LEVEL=DEBUG python main.py --manual
 ```python
 # modules/scheduler.py
 class DataCollectionOrchestrator:
-    def __init__(self, discord_handler, sheets_handler):
+    def __init__(self, discord_handler, sheets_handler, config):
         self.discord = discord_handler
         self.sheets = sheets_handler
+        self.config = config
     
     async def collect_discord_posts(self):
-        # Implementation
-        pass
+        # Determine time window based on collection mode
+        collection_mode = self.config.get('DISCORD_COLLECTION_MODE', 'daily')
+        
+        if collection_mode == 'daily':
+            lookback_days = int(self.config.get('DISCORD_LOOKBACK_DAYS', 1))
+            after = datetime.now() - timedelta(days=lookback_days)
+        elif collection_mode == 'hours':
+            lookback_hours = int(self.config.get('DISCORD_LOOKBACK_HOURS', 24))
+            after = datetime.now() - timedelta(hours=lookback_hours)
+        elif collection_mode == 'since_last':
+            after = self.sheets.get_last_entry_date() or datetime.now() - timedelta(days=1)
+        
+        # Fetch posts with configured limit
+        limit = int(self.config.get('DISCORD_FETCH_LIMIT', 200))
+        return await self.discord.fetch_twitter_posts_with_retry(limit=limit, after=after)
     
     def push_to_sheets(self, posts):
+        # Check for duplicates if configured
+        if self.config.get('DISCORD_SKIP_DUPLICATES', 'true').lower() == 'true':
+            # Filter out existing posts
+            pass
         # Implementation
         pass
 
