@@ -67,6 +67,10 @@ main.py                       # Entry point that uses scheduler
    - Use `schedule` library for simplicity
    - Support manual trigger via command-line flag
    - Daily execution at configured time (default 20:00)
+   - Time interpretation:
+     - By default, uses system local timezone
+     - Optional SCHEDULE_TIMEZONE to specify timezone (requires `pytz` library)
+     - Logs timezone info at startup for clarity
    - Graceful shutdown handling
 
 5. **Error Handling & Resilience**
@@ -97,7 +101,8 @@ GOOGLE_SHEETS_ID=...
 GOOGLE_SERVICE_ACCOUNT_FILE=credentials.json
 
 # Scheduling
-SCHEDULE_TIME=20:00  # 24-hour format
+SCHEDULE_TIME=20:00  # 24-hour format (uses system local time)
+SCHEDULE_TIMEZONE=  # Optional: Timezone (e.g., 'US/Eastern', 'UTC'). If empty, uses system timezone
 
 # Discord Data Collection Time Window
 DISCORD_COLLECTION_MODE=daily      # Options: 'daily', 'hours', 'since_last'
@@ -192,7 +197,7 @@ TYPEFULLY_API_KEY=...   # If using Typefully
 ### Summary Report Format:
 ```
 ================================================================================
-Daily Pipeline Run - 2024-01-15 20:00:00
+Daily Pipeline Run - 2024-01-15 20:00:00 (PST)
 ================================================================================
 Data Collection:
   ✅ Fetched 25 Discord messages
@@ -343,6 +348,19 @@ class ScheduledTaskRunner:
         self.config = config
         self.data_collector = None
         self.workflow_orchestrator = None
+        self.timezone = self._setup_timezone()
+    
+    def _setup_timezone(self):
+        # Setup timezone for scheduling
+        tz_name = self.config.get('SCHEDULE_TIMEZONE')
+        if tz_name:
+            import pytz
+            return pytz.timezone(tz_name)
+        else:
+            # Use system local timezone
+            from datetime import datetime
+            logger.info(f"Using system timezone. Current time: {datetime.now()}")
+            return None
     
     def run_complete_pipeline(self):
         # Step 1: Data collection
@@ -350,7 +368,10 @@ class ScheduledTaskRunner:
         pass
     
     def schedule_daily(self):
-        # Set up scheduling
+        # Set up scheduling with timezone awareness
+        schedule_time = self.config.get('SCHEDULE_TIME', '20:00')
+        schedule.every().day.at(schedule_time).do(self.run_complete_pipeline)
+        logger.info(f"Scheduled daily run at {schedule_time} {'UTC' if self.timezone else 'local time'}")
         pass
     
     def start(self):
