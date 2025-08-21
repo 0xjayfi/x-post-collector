@@ -126,7 +126,7 @@ Once configured, run the complete workflow with a single command:
 ### 🔄 In Progress / Next Steps
 
 1. **Scheduler** (`modules/scheduler.py`)
-   - [ ] Daily run at 20:00 (8 PM)
+   - [ ] Daily run at 20:00 (8 PM) (or a time specified in .env)
    - [ ] Manual trigger option
    - [ ] Error recovery
 
