@@ -150,8 +150,7 @@ class GeminiAnalyzer:
         # Truncate very long content to save tokens
         content = content[:1000] if len(content) > 1000 else content
         
-        prompt = f"""Analyze this Discord post containing a Twitter/X link.
-Determine if this is announcing or discussing a NEW crypto/Web3 project.
+        prompt = f"""Analyze this post containing a Twitter/X link. Determine if this is announcing or discussing a NEW crypto/Web3 project. 
 
 Post content: {content}
 
@@ -159,6 +158,7 @@ Respond with only "YES" or "NO".
 
 Criteria for YES:
 - Mentions new token launch, IDO, or TGE
+- Mentions new project 
 - Announces new protocol or dApp
 - Introduces new NFT collection
 - New DeFi platform or tool

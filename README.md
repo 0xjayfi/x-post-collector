@@ -1,10 +1,41 @@
-# Discord to Google Sheets - Twitter/X Post Collector
+# Discord to X/Twitter Auto-Publisher with AI Analysis
 
-A Python automation tool that collects Twitter/X posts from Discord channels and archives them to Google Sheets daily.
+A complete automation pipeline that collects crypto/Web3 posts from Discord, analyzes them with AI, publishes summaries to X/Twitter or Typefully, and maintains organized archives in Google Sheets.
+
+## 🎯 Key Features
+
+### Complete Automation Workflow
+1. **📥 Discord Collection** - Monitors Discord channels for Twitter/X posts about crypto projects
+2. **📊 Google Sheets Storage** - Stores posts in structured spreadsheet format
+3. **🤖 AI Analysis** - Uses Gemini AI to identify and summarize new Web3/DeFi/NFT projects
+4. **📝 Content Generation** - Creates daily summary drafts of trending projects
+5. **📢 Auto Publishing** - Posts to X/Twitter or schedules via Typefully
+6. **📚 Smart Archiving** - Moves processed posts to Archives with metadata
+
+### Workflow Pipeline
+```
+Discord Channel → Google Sheets → Gemini AI Analysis → 
+Daily Draft Generation → X/Twitter Publishing → Archive System
+```
+
+## ⚡ Quick Start
+
+Once configured, run the complete workflow with a single command:
+
+```bash
+# Run the complete automated pipeline
+./venv/bin/python test_complete_workflow.py
+
+# Or run individual components:
+./venv/bin/python test_discord_integration.py  # Collect from Discord
+./venv/bin/python test_gemini_integration.py   # Analyze with AI
+./venv/bin/python test_sheet_publishing.py     # Publish to X/Twitter
+./venv/bin/python test_archive.py              # Archive processed posts
+```
 
 ## 🚀 Project Status
 
-### ✅ Completed Components (as of 2025-08-16)
+### ✅ Completed Components (as of 2025-08-18)
 
 1. **Discord Handler Module** (`modules/discord_handler.py`)
    - ✅ Connects to Discord using bot token
@@ -72,6 +103,26 @@ A Python automation tool that collects Twitter/X posts from Discord channels and
    - ✅ Direct publishing from "Daily Post Draft" column
    - ✅ Test scripts: `test_x_api.py` (authentication), `test_sheet_publishing.py` (sheet integration)
 
+7. **Archive Handler** (`modules/archive_handler.py`)
+   - ✅ Archives posts marked with "AI processed = TRUE"
+   - ✅ Creates Archives sheet with proper headers if it doesn't exist
+   - ✅ Extracts only essential columns: date, time, author, post_link, content, AI Summary
+   - ✅ Adds metadata: "Date Processed (UTC)" timestamp and "Publication Receipt"
+   - ✅ Fills Publication Receipt for all archived rows in batch
+   - ✅ Removes archived posts from Sheet1 completely
+   - ✅ Clears processing columns (AI Summary, AI processed, Daily Post Draft, Publication receipt)
+   - ✅ Appends to existing Archives sheet (preserves historical data)
+   - ✅ UTC timestamps for consistent time tracking
+   - ✅ Complete workflow integration with error handling
+
+8. **Workflow Orchestrator** (`modules/workflow_orchestrator.py`)
+   - ✅ Orchestrates complete pipeline: Analysis → Publishing → Archiving
+   - ✅ Supports optional components (Gemini AI, X/Typefully publisher)
+   - ✅ Modular design allows running individual steps or complete workflow
+   - ✅ Comprehensive error handling and result tracking
+   - ✅ Detailed logging for each workflow step
+   - ✅ Test scripts: `test_archive.py`, `test_complete_workflow.py`
+
 ### 🔄 In Progress / Next Steps
 
 1. **Scheduler** (`modules/scheduler.py`)
@@ -94,7 +145,8 @@ discord-to-sheets/
 │   ├── sheets_handler.py       ✅ Complete & Tested
 │   ├── gemini_analyzer.py      ✅ Complete & Tested
 │   ├── x_publisher.py          ✅ Complete & Tested
-│   ├── archive_handler.py      🔄 To be implemented
+│   ├── archive_handler.py      ✅ Complete & Tested
+│   ├── workflow_orchestrator.py ✅ Complete & Tested
 │   ├── data_processor.py       🔄 To be implemented
 │   └── scheduler.py            🔄 To be implemented
 ├── tests/
@@ -114,6 +166,8 @@ discord-to-sheets/
 ├── test_gemini_integration.py  ✅ Gemini AI analyzer testing
 ├── test_x_api.py              ✅ X API authentication & permission testing
 ├── test_sheet_publishing.py   ✅ Sheet-based publishing with receipt tracking
+├── test_archive.py            ✅ Archive handler testing & viewer
+├── test_complete_workflow.py  ✅ Complete pipeline testing
 ├── run_tests.py               ✅ Test runner utility
 ├── plan.md                    ✅ Implementation plans & X API setup guide
 └── README.md                  ✅ This file
@@ -221,6 +275,52 @@ For detailed instructions, see [plan.md](./plan.md)
 
 For detailed X API setup, see [plan.md](./plan.md)
 
+### Archive Workflow
+
+The archive system automatically manages processed posts:
+
+1. **Archive Criteria**
+   - Only archives posts marked with `AI processed = TRUE`
+   - Preserves essential columns in Archives sheet
+   - Adds UTC timestamp and publication receipt
+
+2. **Archives Sheet Structure**
+   ```
+   - date, time, author, post_link, content (from original)
+   - AI Summary (from Gemini analysis)
+   - Date Processed (UTC) - when archived
+   - Publication Receipt - tweet URL or draft ID
+   ```
+
+3. **Running Archive Workflow**
+   ```bash
+   # Test archive functionality
+   ./venv/bin/python test_archive.py
+   
+   # View archived posts
+   # Select option 2 in the test script
+   ```
+
+4. **Complete Pipeline**
+   ```bash
+   # Run full workflow: Analyze → Publish → Archive
+   ./venv/bin/python test_complete_workflow.py
+   ```
+
+5. **Using in Code**
+   ```python
+   from modules.archive_handler import ArchiveHandler
+   from modules.sheets_handler import GoogleSheetsHandler
+   
+   # Initialize
+   sheets = GoogleSheetsHandler(credentials_path, sheet_id)
+   archiver = ArchiveHandler(sheets)
+   
+   # Run archive workflow
+   results = archiver.run_archive_workflow()
+   print(f"Archived {results['posts_archived']} posts")
+   ```
+
 ### Publishing Workflow
 
 1. **Test Publishing from Sheet**
@@ -281,6 +381,12 @@ python run_tests.py integration
 
 # Sheet Publishing Integration (Publishes from Google Sheet)
 ./venv/bin/python test_sheet_publishing.py
+
+# Archive Handler Testing (Archives processed posts)
+./venv/bin/python test_archive.py
+
+# Complete Workflow Testing (Full pipeline)
+./venv/bin/python test_complete_workflow.py
 ```
 
 ### Generate CSV Exports for Inspection
@@ -399,18 +505,17 @@ Based on test runs (as of 2025-08-12):
    - ✅ Return publication status/URL
 
 2. **Archive System** (`modules/archive_handler.py`)
-   - [ ] Move processed posts to Archive sheet
-   - [ ] Clear processed posts from Sheet1
-   - [ ] Add metadata columns:
-     - Date Processed (timestamp of archiving)
-     - X Post URL (link to published tweet)
-     - Processing Status (success/failed)
-   - [ ] Maintain data integrity during transfer
+   - ✅ Move processed posts to Archives sheet
+   - ✅ Clear processed posts from Sheet1
+   - ✅ Add metadata columns:
+     - Date Processed (UTC) - timestamp of archiving
+     - Publication Receipt - link to published tweet/draft
+   - ✅ Maintain data integrity during transfer
 
-3. **Workflow Integration**
-   - [ ] Chain: Analyze → Generate Draft → Publish → Archive
-   - [ ] Add rollback mechanism for failures
-   - [ ] Logging and error notifications
+3. **Workflow Integration** (`modules/workflow_orchestrator.py`)
+   - ✅ Chain: Analyze → Generate Draft → Publish → Archive
+   - ✅ Modular design supporting optional components
+   - ✅ Comprehensive error handling and logging
 
 ### Phase 2: Scheduling & Automation
 1. Implement `scheduler.py` with daily runs
@@ -502,5 +607,5 @@ Private project - All rights reserved
 
 ---
 
-*Last Updated: 2025-08-17 by Claude (AI Assistant)*  
-*Session Summary: Enhanced Gemini analyzer with AI processed column and non-project tracking. Added SheetPublisher wrapper for X API/Typefully with automatic Publication receipt column creation. Implemented direct publishing from Google Sheet with receipt tracking (tweet URLs for X API, draft IDs for Typefully). Created comprehensive test script for sheet-based publishing workflow.*
+*Last Updated: 2025-08-18 by Claude (AI Assistant)*  
+*Session Summary: Implemented complete Archive Handler module for managing processed posts. Archives posts marked with "AI processed = TRUE" to Archives sheet with UTC timestamps and publication receipts. Removes archived posts from Sheet1 and clears processing columns. Created Workflow Orchestrator for complete pipeline integration (Analysis → Publishing → Archiving). Added comprehensive test scripts for archive functionality and complete workflow testing. Archives sheet appends data to preserve historical records.*
