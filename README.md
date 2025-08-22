@@ -14,8 +14,15 @@ An automated pipeline that collects Twitter/X posts from Discord channels and pr
 ## 📋 Architecture
 
 ```
-Discord Channel → Google Sheets → Gemini AI Analysis → Daily Draft Generation → X/Twitter Publishing → Archive System
+Discord Channel → CSV File → Google Sheets → Gemini AI Analysis → Daily Draft Generation → X/Twitter Publishing → Archive System
 ```
+
+### Key Architecture Features
+
+- **CSV Intermediate Storage**: Discord data is first saved to CSV files for reliability
+- **Clean Async/Sync Separation**: Discord operations run in isolated async context
+- **Sequential Processing**: Modules are called directly in sequence (no complex orchestration)
+- **Individual Row Analysis**: Gemini AI processes rows one at a time with delays to avoid rate limits
 
 ### Modules
 
@@ -107,7 +114,9 @@ DISCORD_SKIP_DUPLICATES=true   # Check for existing posts
 
 # Gemini AI (optional)
 GEMINI_API_KEY=your_gemini_api_key
-GEMINI_MODEL=gemini-1.5-flash
+GEMINI_MODEL=gemini-2.0-flash-lite  # Latest model for better performance
+GEMINI_DAILY_LIMIT=190              # Conservative limit for free tier
+SKIP_AI_ON_RATE_LIMIT=true         # Continue pipeline if rate limited
 
 # Publishing (optional)
 PUBLISHER_TYPE=twitter  # or 'typefully'
@@ -219,10 +228,13 @@ Processed posts are moved to an archive sheet with:
 - Batch operations for efficiency
 
 ### 3. AI Analysis Phase (Optional - requires Gemini API)
-- Analyze posts for crypto/Web3 projects
-- Generate AI summaries (1-2 sentences)
-- Mark posts as "AI processed"
-- Create daily draft post with project list
+- Analyze posts individually (not in batches) for better rate limit handling
+- 6-second delay between API calls to avoid rate limiting
+- Identify crypto/Web3 projects using AI
+- Generate AI summaries (1-2 sentences) for new projects
+- Mark all analyzed posts as "AI processed" 
+- Posts not identified as projects marked as "Not new project related"
+- Create daily draft post with consolidated project list
 
 ### 4. Publishing Phase (Optional - requires X/Typefully API)
 - Read "Daily Post Draft" from sheet
@@ -254,28 +266,39 @@ Log levels:
 ================================================================================
 Daily Pipeline Run - 2024-01-15 20:00:00 (PST)
 ================================================================================
-Data Collection:
+Phase 1: Discord Data Collection (Async)
   ✅ Fetched 25 Discord messages
   ✅ Found 18 Twitter/X posts
+  ✅ Saved to: data/discord_posts_20240115_200000.csv
+
+Phase 2: CSV to Google Sheets (Sync)
   ✅ Uploaded 15 new posts to Sheets (3 duplicates skipped)
 
-AI Analysis:
-  ✅ Analyzed 15 posts
+Phase 3: Gemini AI Analysis (Sync)
+  ✅ Analyzed 15 posts individually
   ✅ Found 5 crypto projects
   ✅ Generated daily draft
+  ⏱️  Analysis time: ~90-180 seconds (6s delay per row)
 
-Publishing:
+Phase 4: Publishing (Sync)
   ✅ Published to X/Twitter
   📝 Post ID: 123456789
 
-Archive:
+Phase 5: Archive & Cleanup (Sync)
   ✅ Archived 15 processed posts
   📊 Total archived: 1,234 posts
+  ✅ CSV moved to: data/processed/
 
 Overall Status: ✅ SUCCESS
-Runtime: 45.3 seconds
+Runtime: 2-3 minutes (depending on number of posts)
 ================================================================================
 ```
+
+### Performance Notes
+
+- **AI Analysis Speed**: With individual row processing and 6-second delays, expect ~6-12 seconds per post
+- **Total Runtime**: For 20 posts, expect 2-4 minutes total runtime
+- **Rate Limit Safety**: The 6-second delays ensure staying well within Gemini's 15 requests/minute limit
 
 ## 🧪 Testing
 
@@ -290,6 +313,12 @@ Runtime: 45.3 seconds
 
 # Test Gemini AI analysis
 ./venv/bin/python test_gemini_integration.py
+
+# Test individual row analyzer (new)
+./venv/bin/python test_individual_analyzer.py
+
+# Test batch analyzer optimization
+./venv/bin/python test_batch_analyzer.py
 
 # Test X/Twitter publishing
 ./venv/bin/python test_x_api.py
@@ -365,6 +394,12 @@ discord-to-sheets/
    - Check rate limits
    - Review publication receipt column
 
+5. **Gemini AI Rate Limiting**
+   - The system now uses individual row processing with 6-second delays
+   - If still rate limited, increase delays in gemini_analyzer.py
+   - Set SKIP_AI_ON_RATE_LIMIT=true to continue pipeline when rate limited
+   - Consider reducing GEMINI_DAILY_LIMIT to leave buffer
+
 ### Debug Mode
 
 Run with `--debug` flag for detailed logging:
@@ -395,7 +430,9 @@ python main.py --manual --debug
 ### Gemini AI (Free Tier)
 - 1,500 requests per day
 - 15 requests per minute
-- Automatic rate limiting implemented
+- Individual row processing with 6-second delays between API calls
+- Automatic rate limit detection and graceful handling
+- Supports gemini-2.0-flash-lite model for improved performance
 
 ### X/Twitter
 - 50 posts per day
@@ -440,7 +477,7 @@ For issues, questions, or suggestions:
 1. **Core Modules**
    - Discord Handler: Full Twitter/X post extraction with embedded content
    - Sheets Handler: Batch operations with retry logic
-   - Gemini Analyzer: AI-powered project detection and summarization
+   - Gemini Analyzer: AI-powered project detection with individual row processing
    - X Publisher: Twitter and Typefully API integration
    - Archive Handler: Automated post archiving with metadata
    - Workflow Orchestrator: Complete pipeline orchestration
@@ -455,6 +492,8 @@ For issues, questions, or suggestions:
    - 46+ unit tests across all modules
    - Integration tests for each component
    - Complete workflow testing scripts
+   - Individual row analyzer test suite
+   - Rate limit handling tests
 
 ### 🎯 Ready for Production
 
@@ -468,3 +507,25 @@ The bot is fully functional and ready for deployment. All core features have bee
 - ✅ Flexible configuration
 
 Start collecting, analyzing, and publishing your Discord Twitter/X posts today!
+
+## 📝 Recent Updates
+
+### Version 2.0.0 (2025-08-22)
+
+**Major Architecture Changes:**
+- 🔄 **Redesigned Scheduler**: Clean separation of async Discord operations and sync processing
+- 📁 **CSV Intermediate Storage**: Discord data saved to CSV files before processing
+- 🎯 **Individual Row Processing**: Replaced batch analysis with one-by-one processing
+- ⏱️ **Rate Limit Protection**: Added 6-second delays between Gemini API calls
+- 🚀 **Model Upgrade**: Now supports gemini-2.0-flash-lite for better performance
+
+**Improvements:**
+- Better error handling and recovery from rate limits
+- More reliable pipeline execution with isolated async contexts
+- Simplified architecture removing complex orchestration layers
+- Enhanced logging for debugging rate limit issues
+
+**Configuration Updates:**
+- Added `SKIP_AI_ON_RATE_LIMIT` option to continue pipeline when rate limited
+- Updated default model to `gemini-2.0-flash-lite`
+- Reduced default daily limit to 190 requests for safety buffer

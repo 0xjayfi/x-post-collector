@@ -219,16 +219,28 @@ def main():
     elif args.manual:
         logger.info("Running in MANUAL mode (one-time execution)")
         
-        config_dict = build_config_dict()
-        runner = ScheduledTaskRunner(config_dict)
-        
-        results = runner.run_manual()
-        
-        if not results.get('overall_success', False):
-            logger.error("Pipeline execution failed")
+        try:
+            config_dict = build_config_dict()
+            logger.debug(f"Configuration built: {list(config_dict.keys())}")
+            
+            runner = ScheduledTaskRunner(config_dict)
+            logger.debug("ScheduledTaskRunner created")
+            
+            results = runner.run_manual()
+            logger.debug(f"Pipeline results: {results}")
+            
+            if not results.get('overall_success', False):
+                logger.error("Pipeline execution failed")
+                if results.get('error'):
+                    logger.error(f"Error: {results['error']}")
+                sys.exit(1)
+            else:
+                logger.info("Pipeline execution completed successfully")
+        except Exception as e:
+            import traceback
+            logger.error(f"Fatal error in manual mode: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             sys.exit(1)
-        else:
-            logger.info("Pipeline execution completed successfully")
             
     elif args.daemon:
         logger.info("Running in DAEMON mode (scheduled execution)")
