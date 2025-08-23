@@ -187,7 +187,11 @@ class SequentialProcessor:
         gemini_key = config.get('GEMINI_API_KEY')
         if gemini_key:
             try:
-                self.gemini_analyzer = GeminiAnalyzer(api_key=gemini_key)
+                self.gemini_analyzer = GeminiAnalyzer(
+                    api_key=gemini_key,
+                    model=config.get('GEMINI_MODEL', 'gemini-1.5-flash'),
+                    daily_limit=int(config.get('GEMINI_DAILY_LIMIT', 1400))
+                )
                 logger.info("Gemini analyzer initialized")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini: {e}")
