@@ -428,11 +428,23 @@ python main.py --manual --debug
 - Batch operations to minimize API calls
 
 ### Gemini AI (Free Tier)
-- 1,500 requests per day
-- 15 requests per minute
+
+#### Rate Limits Table
+
+| Model | RPM (Requests Per Minute) | TPM (Tokens Per Minute) | RPD (Requests Per Day) |
+|-------|---------------------------|-------------------------|------------------------|
+| **Text-output models** | | | |
+| Gemini 2.5 Pro | 5 | 250,000 | 100 |
+| Gemini 2.5 Flash | 10 | 250,000 | 250 |
+| Gemini 2.5 Flash-Lite | 15 | 250,000 | 1,000 |
+| Gemini 2.0 Flash | 15 | 1,000,000 | 200 |
+| Gemini 2.0 Flash-Lite | 30 | 1,000,000 | 200 |
+
+#### Implementation Details
 - Individual row processing with 6-second delays between API calls
 - Automatic rate limit detection and graceful handling
-- Supports gemini-2.0-flash-lite model for improved performance
+- Currently configured to use gemini-2.0-flash-lite model for optimal performance
+- Conservative daily limit of 190 requests to maintain safety buffer
 
 ### X/Twitter
 - 50 posts per day
@@ -465,6 +477,19 @@ For issues, questions, or suggestions:
 - Open an issue on GitHub
 - Check existing issues for solutions
 - Review logs for error details
+
+## 📚 References
+
+### API Documentation
+- [Gemini API Rate Limits (Free Tier)](https://ai.google.dev/gemini-api/docs/rate-limits#free-tier)
+- [Gemini API Pricing](https://ai.google.dev/gemini-api/docs/pricing)
+
+### Other Resources
+- [Discord Developer Portal](https://discord.com/developers/applications)
+- [Google Cloud Console](https://console.cloud.google.com)
+- [Google Sheets API Documentation](https://developers.google.com/sheets/api)
+- [Twitter/X API Documentation](https://developer.twitter.com/en/docs)
+- [Typefully API Documentation](https://support.typefully.com/en/articles/8718287-typefully-api)
 
 ---
 
@@ -509,6 +534,33 @@ The bot is fully functional and ready for deployment. All core features have bee
 Start collecting, analyzing, and publishing your Discord Twitter/X posts today!
 
 ## 📝 Recent Updates
+
+### Version 2.0.1 (2025-08-23)
+
+**Major Improvements:**
+- 🌍 **Dynamic Timezone Support**: 
+  - Convert Discord UTC timestamps to local timezone automatically
+  - Display dynamic timezone in column headers (e.g., "Time (UTC+8)", "Time (PST)")
+  - Added timezone detection utility for both named zones and UTC offsets
+- 🔧 **Fixed Case-Sensitive Column Lookups**: 
+  - All column name comparisons now case-insensitive throughout codebase
+  - Prevents errors from inconsistent column name casing
+- 🤖 **Fixed Gemini Analyzer Initialization**: 
+  - Pass model and daily_limit parameters correctly in scheduler
+  - Fixed manual mode AI analysis failures
+  - Updated daily draft format to remove unsupported markdown links
+
+**Documentation Updates:**
+- 📊 **Added Gemini API Rate Limits Table**: Comprehensive table showing RPM, TPM, and RPD limits for all Gemini models in free tier
+- 📚 **Added References Section**: Centralized API documentation links for Gemini, Discord, Google Sheets, and other services
+
+**Files Modified:**
+- `utils/timezone_utils.py`: New utility module for timezone handling
+- `modules/discord_handler.py`: Convert timestamps from UTC to local
+- `modules/scheduler.py`: Dynamic timezone headers and Gemini init fix
+- `modules/archive_handler.py`: Dynamic timezone in Archive sheets
+- `modules/gemini_analyzer.py`: Case-insensitive column handling
+- `main.py`: Improved logging configuration
 
 ### Version 2.0.0 (2025-08-22)
 

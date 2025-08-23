@@ -106,7 +106,7 @@ def validate_typefully_config() -> bool:
 
 # Application Configuration
 APP_NAME = "Discord to Google Sheets Bot"
-VERSION = "1.0.0"
+VERSION = "2.0.1"
 TWITTER_LINK_PATTERNS = [
     r'https?://(?:www\.)?twitter\.com/\S+',
     r'https?://(?:www\.)?x\.com/\S+'
