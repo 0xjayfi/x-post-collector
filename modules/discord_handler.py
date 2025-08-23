@@ -3,7 +3,8 @@
 import re
 import asyncio
 import logging
-from datetime import datetime, timedelta
+import time
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from dataclasses import dataclass
 
@@ -187,7 +188,15 @@ class DiscordHandler:
         Returns:
             TwitterPost object with extracted data
         """
-        created_at = message.created_at
+        # Discord message.created_at is in UTC, convert to local time
+        created_at_utc = message.created_at
+        # Convert UTC to local time by adding the local timezone offset
+        # time.timezone gives offset in seconds (negative for timezones ahead of UTC)
+        created_at = created_at_utc + timedelta(seconds=-time.timezone)
+        # If DST is active, adjust for it
+        if time.daylight and time.localtime().tm_isdst:
+            created_at = created_at + timedelta(seconds=time.altzone - time.timezone)
+        
         twitter_link = self.extract_twitter_link(message.content)
         
         # Extract content from embed if available (for TweetShift embeds)

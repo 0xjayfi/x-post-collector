@@ -21,6 +21,7 @@ from modules.gemini_analyzer import GeminiAnalyzer, SheetAnalyzer
 from modules.x_publisher import create_publisher, SheetPublisher
 from modules.archive_handler import ArchiveHandler
 from utils.logger import setup_logger
+from utils.timezone_utils import get_time_column_header
 
 logger = setup_logger(__name__)
 
@@ -150,8 +151,9 @@ class AsyncDiscordCollector:
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             
-            # Write headers
-            writer.writerow(['date', 'time', 'content', 'post_link', 'author', 'author_link'])
+            # Write headers (matching Google Sheets format with dynamic timezone)
+            time_header = get_time_column_header()
+            writer.writerow(['Date', time_header, 'Content', 'Post Link', 'Author', 'Author Link'])
             
             # Write data
             for post in posts:
@@ -253,13 +255,20 @@ class SequentialProcessor:
             with open(csv_path, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
+                    # Find the time column (it will have dynamic timezone like "Time (PST)")
+                    time_value = None
+                    for key in row.keys():
+                        if key.startswith('Time'):
+                            time_value = row[key]
+                            break
+                    
                     posts.append([
-                        row['date'],
-                        row['time'],
-                        row['content'],
-                        row['post_link'],
-                        row['author'],
-                        row['author_link']
+                        row['Date'],
+                        time_value if time_value else '',
+                        row['Content'],
+                        row['Post Link'],
+                        row['Author'],
+                        row['Author Link']
                     ])
             
             logger.info(f"Read {len(posts)} posts from CSV")
@@ -281,7 +290,8 @@ class SequentialProcessor:
                 # Ensure headers exist
                 existing_data = self.sheets.get_sheet_data()
                 if not existing_data:
-                    headers = ["Date", "Time", "Content", "Post Link", "Author", "Author Link"]
+                    time_header = get_time_column_header()
+                    headers = ["Date", time_header, "Content", "Post Link", "Author", "Author Link"]
                     self.sheets.append_data([headers])
                     logger.info("Added headers to empty sheet")
                 
@@ -320,11 +330,11 @@ class SequentialProcessor:
                 logger.info("No existing data in sheets")
                 return posts
             
-            # Find Post Link column index
+            # Find Post Link column index (case-insensitive)
             headers = existing_data[0] if existing_data else []
             link_col_idx = -1
             for idx, header in enumerate(headers):
-                if 'Post Link' in header:
+                if 'post link' in header.lower():
                     link_col_idx = idx
                     break
             
@@ -472,11 +482,12 @@ class SequentialProcessor:
                 results['success'] = True
                 return results
             
-            # Find Daily Post Draft column
+            # Find Daily Post Draft column (case-insensitive)
             headers = sheet_data[0]
             draft_col = -1
             for idx, header in enumerate(headers):
-                if 'Daily Post Draft' in header or 'AI Draft' in header:
+                header_lower = header.lower()
+                if 'daily post draft' in header_lower or 'ai draft' in header_lower:
                     draft_col = idx
                     break
             

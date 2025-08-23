@@ -170,6 +170,8 @@ Criteria for NO:
 - Price talk about existing tokens
 - News about established projects
 - Personal opinions without new project info"""
+
+        logger.debug(f"Project detection prompt: {prompt}")
         
         try:
             response = self._make_request(prompt, temperature=0.1)
@@ -421,13 +423,14 @@ class SheetAnalyzer:
             ai_processed_col = -1
             daily_draft_col = -1
             
-            # Check for existing columns
+            # Check for existing columns (case-insensitive)
             for i, header in enumerate(headers):
-                if header == 'AI Summary':
+                header_lower = header.lower()
+                if header_lower == 'ai summary':
                     ai_summary_col = i
-                elif header == 'AI processed':
+                elif header_lower == 'ai processed':
                     ai_processed_col = i
-                elif header == 'Daily Post Draft':
+                elif header_lower == 'daily post draft':
                     daily_draft_col = i
             
             # Check if columns need to be added
@@ -506,16 +509,26 @@ class SheetAnalyzer:
             headers = rows[0]
             data_rows = rows[1:]
             
-            # Find column indices
-            content_idx = headers.index('content') if 'content' in headers else 4
-            post_link_idx = headers.index('post_link') if 'post_link' in headers else 3
-            date_idx = headers.index('date') if 'date' in headers else 0
+            # Find column indices (case-insensitive)
+            # Convert headers to lowercase for comparison
+            headers_lower = [h.lower() for h in headers]
+            content_idx = headers_lower.index('content') if 'content' in headers_lower else 4
+            post_link_idx = headers_lower.index('post link') if 'post link' in headers_lower else 3
+            date_idx = headers_lower.index('date') if 'date' in headers_lower else 0
             
-            # Check for AI Summary column
-            ai_summary_idx = headers.index('AI Summary') if 'AI Summary' in headers else -1
+            # Check for AI Summary column (case-insensitive)
+            ai_summary_idx = -1
+            for idx, header in enumerate(headers):
+                if header.lower() == 'ai summary':
+                    ai_summary_idx = idx
+                    break
             
-            # Check for AI processed column to skip already processed rows
-            ai_processed_idx = headers.index('AI processed') if 'AI processed' in headers else -1
+            # Check for AI processed column to skip already processed rows (case-insensitive)
+            ai_processed_idx = -1
+            for idx, header in enumerate(headers):
+                if header.lower() == 'ai processed':
+                    ai_processed_idx = idx
+                    break
             
             # Process rows individually
             skipped_count = 0

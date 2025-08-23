@@ -15,7 +15,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import config
-from utils.logger import setup_logger
 from modules.scheduler import ScheduledTaskRunner
 
 
@@ -200,8 +199,22 @@ def main():
     
     # Setup logging
     log_level = logging.DEBUG if args.debug else getattr(logging, config.LOG_LEVEL)
-    logger = setup_logger(__name__)
-    logger.setLevel(log_level)
+    
+    # Configure root logger to ensure all module logs are visible
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        force=True  # Force reconfiguration to avoid duplicates
+    )
+    
+    # Get logger for main
+    logger = logging.getLogger(__name__)
+    
+    # Ensure gemini_analyzer and other module loggers are at the correct level
+    logging.getLogger('modules.gemini_analyzer').setLevel(log_level)
+    logging.getLogger('modules.scheduler').setLevel(log_level)
+    logging.getLogger('modules.sheets_handler').setLevel(log_level)
     
     # Log startup info
     logger.info(f"{config.APP_NAME} v{config.VERSION}")
