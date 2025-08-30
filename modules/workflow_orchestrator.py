@@ -182,6 +182,9 @@ class WorkflowOrchestrator:
                     break
             
             if not row_to_publish:
+                logger.info("No draft found to publish")
+                results['success'] = True  # Not a failure, just nothing to publish
+                results['published'] = False
                 results['errors'].append("No draft found to publish")
                 return results
             
@@ -262,9 +265,14 @@ class WorkflowOrchestrator:
             results['publishing'] = self.run_publishing()
             
             if results['publishing']['success']:
-                results['summary'].append(
-                    f"✅ Published successfully: {results['publishing']['url'] or results['publishing']['post_id']}"
-                )
+                if results['publishing'].get('published'):
+                    results['summary'].append(
+                        f"✅ Published successfully: {results['publishing']['url'] or results['publishing']['post_id']}"
+                    )
+                else:
+                    results['summary'].append(
+                        f"ℹ️  No draft available to publish"
+                    )
             else:
                 results['summary'].append(
                     f"❌ Publishing failed: {results['publishing']['errors']}"

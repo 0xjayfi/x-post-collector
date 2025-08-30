@@ -8,6 +8,7 @@ It archives posts marked with AI processed = TRUE and cleans up the source sheet
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
 import logging
+from utils.timezone_utils import get_time_column_header
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +64,11 @@ class ArchiveHandler:
                 
                 logger.info(f"Created Archives sheet")
             
-            # Define expected headers
+            # Define expected headers with dynamic timezone
+            time_header = get_time_column_header()
             expected_headers = [
-                'date', 'time', 'author', 'post_link', 
-                'content', 'AI Summary',
+                'Date', time_header, 'Author', 'Post Link', 
+                'Content', 'AI Summary',
                 'Date Processed (UTC)', 'Publication Receipt'
             ]
             
@@ -127,8 +129,12 @@ class ArchiveHandler:
             headers = source_data[0]
             data_rows = source_data[1:]
             
-            # Find required column indices
-            ai_processed_idx = headers.index('AI processed') if 'AI processed' in headers else -1
+            # Find required column indices (case-insensitive)
+            ai_processed_idx = -1
+            for idx, header in enumerate(headers):
+                if header.lower() == 'ai processed':
+                    ai_processed_idx = idx
+                    break
             
             if ai_processed_idx == -1:
                 logger.warning("AI processed column not found")
@@ -179,7 +185,12 @@ class ArchiveHandler:
             for post in posts:
                 headers = post['headers']
                 row = post['data']
-                publication_receipt_idx = headers.index('Publication receipt') if 'Publication receipt' in headers else -1
+                # Find publication receipt column (case-insensitive)
+                publication_receipt_idx = -1
+                for idx, header in enumerate(headers):
+                    if 'publication receipt' in header.lower():
+                        publication_receipt_idx = idx
+                        break
                 
                 if publication_receipt_idx >= 0 and len(row) > publication_receipt_idx:
                     receipt_value = row[publication_receipt_idx]
@@ -193,13 +204,25 @@ class ArchiveHandler:
                 headers = post['headers']
                 row = post['data']
                 
-                # Find column indices for required data
-                date_idx = headers.index('date') if 'date' in headers else -1
-                time_idx = headers.index('time') if 'time' in headers else -1
-                author_idx = headers.index('author') if 'author' in headers else -1
-                post_link_idx = headers.index('post_link') if 'post_link' in headers else -1
-                content_idx = headers.index('content') if 'content' in headers else -1
-                ai_summary_idx = headers.index('AI Summary') if 'AI Summary' in headers else -1
+                # Find column indices for required data (case-insensitive)
+                headers_lower = [h.lower() for h in headers]
+                date_idx = headers_lower.index('date') if 'date' in headers_lower else -1
+                # Look for either 'time' or 'time (local time zone)'
+                time_idx = -1
+                for idx, header in enumerate(headers_lower):
+                    if 'time' in header:  # This will match both 'time' and 'time (local time zone)'
+                        time_idx = idx
+                        break
+                author_idx = headers_lower.index('author') if 'author' in headers_lower else -1
+                post_link_idx = headers_lower.index('post link') if 'post link' in headers_lower else -1
+                content_idx = headers_lower.index('content') if 'content' in headers_lower else -1
+                
+                # Find AI Summary column (case-insensitive)
+                ai_summary_idx = -1
+                for idx, header in enumerate(headers):
+                    if header.lower() == 'ai summary':
+                        ai_summary_idx = idx
+                        break
                 
                 # Build archive row with only required columns
                 archive_row = [

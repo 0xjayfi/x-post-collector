@@ -1,611 +1,583 @@
-# Discord to X/Twitter Auto-Publisher with AI Analysis
+# Discord to Google Sheets Bot
 
-A complete automation pipeline that collects crypto/Web3 posts from Discord, analyzes them with AI, publishes summaries to X/Twitter or Typefully, and maintains organized archives in Google Sheets.
+An automated pipeline that collects Twitter/X posts from Discord channels and processes them through a complete workflow: collection, AI analysis, publishing, and archiving.
 
-## 🎯 Key Features
+## 🚀 Features
 
-### Complete Automation Workflow
-1. **📥 Discord Collection** - Monitors Discord channels for Twitter/X posts about crypto projects
-2. **📊 Google Sheets Storage** - Stores posts in structured spreadsheet format
-3. **🤖 AI Analysis** - Uses Gemini AI to identify and summarize new Web3/DeFi/NFT projects
-4. **📝 Content Generation** - Creates daily summary drafts of trending projects
-5. **📢 Auto Publishing** - Posts to X/Twitter or schedules via Typefully
-6. **📚 Smart Archiving** - Moves processed posts to Archives with metadata
+- **Discord Data Collection**: Automatically fetch Twitter/X posts from specified Discord channels
+- **Google Sheets Integration**: Store and manage posts in Google Sheets
+- **AI Analysis**: Analyze posts using Google's Gemini AI to identify crypto projects and generate summaries
+- **Automated Publishing**: Publish daily summaries to X/Twitter or Typefully
+- **Archive System**: Automatically archive processed posts with publication tracking
+- **Flexible Scheduling**: Run manually or on a daily schedule with timezone support
 
-### Workflow Pipeline
-```
-Discord Channel → Google Sheets → Gemini AI Analysis → 
-Daily Draft Generation → X/Twitter Publishing → Archive System
-```
-
-## ⚡ Quick Start
-
-Once configured, run the complete workflow with a single command:
-
-```bash
-# Run the complete automated pipeline
-./venv/bin/python test_complete_workflow.py
-
-# Or run individual components:
-./venv/bin/python test_discord_integration.py  # Collect from Discord
-./venv/bin/python test_gemini_integration.py   # Analyze with AI
-./venv/bin/python test_sheet_publishing.py     # Publish to X/Twitter
-./venv/bin/python test_archive.py              # Archive processed posts
-```
-
-## 🚀 Project Status
-
-### ✅ Completed Components (as of 2025-08-18)
-
-1. **Discord Handler Module** (`modules/discord_handler.py`)
-   - ✅ Connects to Discord using bot token
-   - ✅ Fetches messages from specified channel
-   - ✅ Filters messages containing Twitter/X links
-   - ✅ Extracts embedded content from Discord messages (not just links)
-   - ✅ Preserves Discord markdown format for usernames (e.g., `[@username](link)`)
-   - ✅ Maintains paragraph structure from original embeds
-   - ✅ Handles zero-width characters in Discord markdown
-   - ✅ Implements retry logic with exponential backoff
-   - ✅ Formats data into structured `TwitterPost` objects
-   - ✅ Supports date range queries
-
-2. **Testing Infrastructure**
-   - ✅ Comprehensive unit tests (`tests/test_discord_handler.py`)
-   - ✅ Integration tests with real Discord connection (`test_discord_integration.py`)
-   - ✅ CSV export functionality for data inspection
-   - ✅ Test runner script (`run_tests.py`)
-
-3. **Data Extraction Features**
-   - ✅ Extracts full embedded tweet content (not just URLs)
-   - ✅ Captures project announcements with follower counts
-   - ✅ Preserves lists of trending projects/accounts
-   - ✅ Includes bio information and descriptions
-   - ✅ Maintains author information and timestamps
-   - ✅ Preserves multi-paragraph structure from embeds
-   - ✅ Supports content up to 1000 characters (increased from 500)
-
-4. **Google Sheets Integration** (`modules/sheets_handler.py`)
-   - ✅ Service account authentication with Google API
-   - ✅ CSV file reading with multiple encoding support
-   - ✅ Batch write operations for large datasets
-   - ✅ Duplicate detection via last entry date
-   - ✅ Sheet clearing with header preservation
-   - ✅ Exponential backoff retry for rate limits
-   - ✅ Comprehensive error handling and logging
-   - ✅ Support for append and replace modes
-   - ✅ Data validation and structure verification
-
-5. **Gemini AI Analyzer** (`modules/gemini_analyzer.py`)
-   - ✅ Integration with Google's Gemini AI (free tier)
-   - ✅ Automatic detection of new crypto/Web3 projects
-   - ✅ Extraction of Twitter/X project info from embedded Discord content
-   - ✅ AI-powered project summarization (1-2 sentences)
-   - ✅ Rate limiting for free tier (1500 requests/day, 15/minute)
-   - ✅ Batch processing for API efficiency
-   - ✅ Daily draft generation with structured format
-   - ✅ Automatic column creation (AI Summary, AI processed, Daily Post Draft)
-   - ✅ Non-project posts marked as "Not new project related"
-   - ✅ AI processed column tracks all analyzed rows with "TRUE" value
-   - ✅ Integration test script with dry-run mode
-   - ✅ Fixed sheet update logic for proper column creation
-
-6. **X API Publisher** (`modules/x_publisher.py`)
-   - ✅ X API v2 authentication with OAuth 2.0
-   - ✅ Tweet publishing with automatic thread creation for long content
-   - ✅ Rate limiting (50 posts/day, 5 posts/15min)
-   - ✅ Typefully API support with UTC time scheduling
-   - ✅ Content validation and formatting
-   - ✅ Automatic hashtag addition
-   - ✅ Error handling with detailed diagnostics
-   - ✅ SheetPublisher wrapper for Google Sheets integration
-   - ✅ Automatic "Publication receipt" column creation
-   - ✅ Receipt tracking (tweet URLs for X API, draft IDs for Typefully)
-   - ✅ Direct publishing from "Daily Post Draft" column
-   - ✅ Test scripts: `test_x_api.py` (authentication), `test_sheet_publishing.py` (sheet integration)
-
-7. **Archive Handler** (`modules/archive_handler.py`)
-   - ✅ Archives posts marked with "AI processed = TRUE"
-   - ✅ Creates Archives sheet with proper headers if it doesn't exist
-   - ✅ Extracts only essential columns: date, time, author, post_link, content, AI Summary
-   - ✅ Adds metadata: "Date Processed (UTC)" timestamp and "Publication Receipt"
-   - ✅ Fills Publication Receipt for all archived rows in batch
-   - ✅ Removes archived posts from Sheet1 completely
-   - ✅ Clears processing columns (AI Summary, AI processed, Daily Post Draft, Publication receipt)
-   - ✅ Appends to existing Archives sheet (preserves historical data)
-   - ✅ UTC timestamps for consistent time tracking
-   - ✅ Complete workflow integration with error handling
-
-8. **Workflow Orchestrator** (`modules/workflow_orchestrator.py`)
-   - ✅ Orchestrates complete pipeline: Analysis → Publishing → Archiving
-   - ✅ Supports optional components (Gemini AI, X/Typefully publisher)
-   - ✅ Modular design allows running individual steps or complete workflow
-   - ✅ Comprehensive error handling and result tracking
-   - ✅ Detailed logging for each workflow step
-   - ✅ Test scripts: `test_archive.py`, `test_complete_workflow.py`
-
-### 🔄 In Progress / Next Steps
-
-1. **Scheduler** (`modules/scheduler.py`)
-   - [ ] Daily run at 20:00 (8 PM)
-   - [ ] Manual trigger option
-   - [ ] Error recovery
-
-2. **Main Application** (`main.py`)
-   - [ ] Orchestration logic
-   - [ ] Configuration management
-   - [ ] Error handling and logging
-
-## 📁 Project Structure
+## 📋 Architecture
 
 ```
-discord-to-sheets/
-├── modules/
-│   ├── __init__.py
-│   ├── discord_handler.py      ✅ Complete & Tested
-│   ├── sheets_handler.py       ✅ Complete & Tested
-│   ├── gemini_analyzer.py      ✅ Complete & Tested
-│   ├── x_publisher.py          ✅ Complete & Tested
-│   ├── archive_handler.py      ✅ Complete & Tested
-│   ├── workflow_orchestrator.py ✅ Complete & Tested
-│   ├── data_processor.py       🔄 To be implemented
-│   └── scheduler.py            🔄 To be implemented
-├── tests/
-│   ├── __init__.py
-│   ├── test_discord_handler.py ✅ 16 unit tests passing
-│   ├── test_sheets_handler.py  ✅ 12 unit tests passing
-│   ├── test_gemini_analyzer.py ✅ 18 unit tests passing
-│   └── test_data_processor.py  🔄 To be implemented
-├── utils/
-│   └── logger.py               🔄 To be implemented
-├── .env                        ✅ Configured with Discord credentials
-├── .env.example               
-├── requirements.txt            ✅ Dependencies installed
-├── CLAUDE.md                   ✅ AI assistant guidelines
-├── test_discord_integration.py ✅ Integration tests with CSV export
-├── test_sheets_integration.py  ✅ Google Sheets upload testing
-├── test_gemini_integration.py  ✅ Gemini AI analyzer testing
-├── test_x_api.py              ✅ X API authentication & permission testing
-├── test_sheet_publishing.py   ✅ Sheet-based publishing with receipt tracking
-├── test_archive.py            ✅ Archive handler testing & viewer
-├── test_complete_workflow.py  ✅ Complete pipeline testing
-├── run_tests.py               ✅ Test runner utility
-├── plan.md                    ✅ Implementation plans & X API setup guide
-└── README.md                  ✅ This file
+Discord Channel → CSV File → Google Sheets → Gemini AI Analysis → Daily Draft Generation → X/Twitter Publishing → Archive System
 ```
 
-## 🔧 Setup & Configuration
+### Key Architecture Features
+
+- **CSV Intermediate Storage**: Discord data is first saved to CSV files for reliability
+- **Clean Async/Sync Separation**: Discord operations run in isolated async context
+- **Sequential Processing**: Modules are called directly in sequence (no complex orchestration)
+- **Individual Row Analysis**: Gemini AI processes rows one at a time with delays to avoid rate limits
+
+### Modules
+
+- **`discord_handler.py`**: Fetches Twitter/X posts from Discord channels
+- **`sheets_handler.py`**: Manages Google Sheets operations (read/write)
+- **`gemini_analyzer.py`**: AI-powered post analysis and summarization
+- **`x_publisher.py`**: Publishes content to X/Twitter or Typefully
+- **`archive_handler.py`**: Archives processed posts with metadata
+- **`workflow_orchestrator.py`**: Orchestrates the AI → Publishing → Archive flow
+- **`scheduler.py`**: Main scheduler for the complete pipeline
+- **`main.py`**: Entry point with CLI interface
+
+## 🛠️ Installation
 
 ### Prerequisites
+
 - Python 3.8+
 - Discord Bot Token
-- Google Cloud Project with Sheets API enabled
-- Google Service Account credentials (credentials.json)
+- Google Cloud Service Account
+- Google Sheets API enabled
+- (Optional) Gemini AI API key
+- (Optional) X/Twitter API credentials or Typefully API key
 
-### Environment Variables (.env)
+### Setup
+
+1. **Clone the repository**:
 ```bash
-# Discord Configuration
+git clone https://github.com/yourusername/discord-to-sheets.git
+cd discord-to-sheets
+```
+
+2. **Create virtual environment**:
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. **Install dependencies**:
+```bash
+pip install -r requirements.txt
+```
+
+4. **Set up Discord Bot**:
+   - Go to [Discord Developer Portal](https://discord.com/developers/applications)
+   - Create a new application and bot
+   - Copy the bot token
+   - Add bot to your server with "Read Messages" and "Read Message History" permissions
+
+5. **Set up Google Sheets API**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com)
+   - Create a new project or select existing
+   - Enable Google Sheets API
+   - Create a service account and download the JSON key as `credentials.json`
+   - Share your Google Sheet with the service account email
+
+6. **Configure environment variables**:
+```bash
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+## ⚙️ Configuration
+
+### Required Configuration
+
+```env
+# Discord
 DISCORD_TOKEN=your_discord_bot_token
 DISCORD_CHANNEL_ID=your_channel_id
 
-# Google Sheets Configuration
-GOOGLE_SHEETS_ID=your_sheet_id  # Just the ID, not the full URL
+# Google Sheets
+GOOGLE_SHEETS_ID=your_sheet_id
 GOOGLE_SERVICE_ACCOUNT_FILE=credentials.json
-GOOGLE_SHEET_NAME=Sheet1
-SHEETS_BATCH_SIZE=100  # Optional, default 100
+```
 
-# Gemini AI Configuration
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-1.5-flash  # Optional, default model
-GEMINI_DAILY_LIMIT=1400  # Optional, daily request limit
+### Optional Configuration
 
-# X API Configuration (for Twitter publishing)
+```env
+# Scheduling (default: 20:00 local time)
+SCHEDULE_TIME=20:00
+SCHEDULE_TIMEZONE=UTC  # Optional: specify timezone
+
+# Discord Collection
+DISCORD_COLLECTION_MODE=daily  # Options: daily, hours, since_last
+DISCORD_LOOKBACK_DAYS=1        # For 'daily' mode
+DISCORD_LOOKBACK_HOURS=24      # For 'hours' mode
+DISCORD_FETCH_LIMIT=200        # Max messages per run
+DISCORD_SKIP_DUPLICATES=true   # Check for existing posts
+
+# Gemini AI (optional)
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-2.0-flash-lite  # Latest model for better performance
+GEMINI_DAILY_LIMIT=190              # Conservative limit for free tier
+SKIP_AI_ON_RATE_LIMIT=true         # Continue pipeline if rate limited
+
+# Publishing (optional)
+PUBLISHER_TYPE=twitter  # or 'typefully'
+
+# For X/Twitter
 X_API_KEY=your_x_api_key
 X_API_SECRET=your_x_api_secret
 X_ACCESS_TOKEN=your_x_access_token
 X_ACCESS_TOKEN_SECRET=your_x_access_token_secret
 
-# Typefully API Configuration (alternative to X API)
-TYPEFULLY_API_KEY=your_typefully_api_key  # Optional
-TYPEFULLY_HOURS_DELAY=8  # Schedule posts X hours from now
+# For Typefully
+TYPEFULLY_API_KEY=your_typefully_api_key
+TYPEFULLY_HOURS_DELAY=0
 
-# Publishing Configuration
-PUBLISHER_TYPE=twitter  # 'twitter' or 'typefully'
-
-# Schedule Configuration
-SCHEDULE_TIME=20:00  # Default 8 PM
+# Archive
+ARCHIVE_SHEET_NAME=Archive
+ARCHIVE_BATCH_SIZE=50
 ```
 
-### Installation
+### Collection Modes
+
+- **`daily`**: Collect posts from the last N days
+- **`hours`**: Collect posts from the last N hours
+- **`since_last`**: Collect posts since the last entry in Google Sheets
+
+## 🎮 Usage
+
+### Test Configuration
+
+Validate your setup before running:
+
 ```bash
-# Create virtual environment
-python3 -m venv venv
-
-# Activate virtual environment
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+python main.py --test
 ```
 
-### Google Sheets Setup
-1. **Create Google Cloud Project**
-   - Go to [Google Cloud Console](https://console.cloud.google.com/)
-   - Create new project or select existing
-   - Enable Google Sheets API and Google Drive API
+This will test:
+- Discord connection
+- Google Sheets access
+- Gemini AI (if configured)
+- Publishing credentials (if configured)
 
-2. **Create Service Account**
-   - Go to APIs & Services → Credentials
-   - Create Service Account
-   - Download JSON key as `credentials.json`
-   - Place in project root directory
+### Manual Execution
 
-3. **Share Your Google Sheet**
-   - Open your target Google Sheet
-   - Click Share button
-   - Add service account email (found in credentials.json)
-   - Give Editor permissions
+Run the pipeline once immediately:
 
-4. **Configure Sheet ID**
-   - Copy ID from sheet URL: `https://docs.google.com/spreadsheets/d/SHEET_ID/edit`
-   - Add to `.env` file (just the ID, not full URL)
+```bash
+python main.py --manual
+```
 
-For detailed instructions, see [plan.md](./plan.md)
+With debug logging:
 
-### X API Setup
-1. **Create X Developer Account**
-   - Go to [Twitter Developer Portal](https://developer.twitter.com)
-   - Apply for developer access
-   - Create a Project and App
+```bash
+python main.py --manual --debug
+```
 
-2. **Configure App Permissions**
-   - Go to App Settings → User authentication settings
-   - Set **App permissions** to **"Read and write"**
-   - Save settings
+### Scheduled Daemon
 
-3. **Generate Credentials**
-   - Go to Keys and tokens tab
-   - Save API Key and Secret
-   - Generate Access Token with Read/Write permissions
-   - Save all 4 credentials to `.env`
+Run as a daemon with daily scheduling:
 
-4. **Test Authentication**
-   ```bash
-   ./venv/bin/python test_x_api.py
-   ```
+```bash
+python main.py --daemon
+# or simply
+python main.py
+```
 
-For detailed X API setup, see [plan.md](./plan.md)
+The bot will run daily at the time specified in `SCHEDULE_TIME`.
 
-### Archive Workflow
+### Command-Line Options
 
-The archive system automatically manages processed posts:
+```
+usage: main.py [-h] [--manual] [--test] [--daemon] [--debug]
 
-1. **Archive Criteria**
-   - Only archives posts marked with `AI processed = TRUE`
-   - Preserves essential columns in Archives sheet
-   - Adds UTC timestamp and publication receipt
+options:
+  -h, --help  show this help message and exit
+  --manual    Run the pipeline once immediately and exit
+  --test      Test mode - validate configuration and connections
+  --daemon    Run as daemon with scheduled execution (default)
+  --debug     Enable debug logging
+```
 
-2. **Archives Sheet Structure**
-   ```
-   - date, time, author, post_link, content (from original)
-   - AI Summary (from Gemini analysis)
-   - Date Processed (UTC) - when archived
-   - Publication Receipt - tweet URL or draft ID
-   ```
+## 📊 Google Sheets Structure
 
-3. **Running Archive Workflow**
-   ```bash
-   # Test archive functionality
-   ./venv/bin/python test_archive.py
-   
-   # View archived posts
-   # Select option 2 in the test script
-   ```
+### Main Sheet (Sheet1)
 
-4. **Complete Pipeline**
-   ```bash
-   # Run full workflow: Analyze → Publish → Archive
-   ./venv/bin/python test_complete_workflow.py
-   ```
+The main sheet should have these columns:
 
-5. **Using in Code**
-   ```python
-   from modules.archive_handler import ArchiveHandler
-   from modules.sheets_handler import GoogleSheetsHandler
-   
-   # Initialize
-   sheets = GoogleSheetsHandler(credentials_path, sheet_id)
-   archiver = ArchiveHandler(sheets)
-   
-   # Run archive workflow
-   results = archiver.run_archive_workflow()
-   print(f"Archived {results['posts_archived']} posts")
-   ```
+| Date | Time | Content | Post Link | Author | Author Link | AI Summary | AI Processed | Daily Post Draft | Publication Receipt |
+|------|------|---------|-----------|--------|-------------|------------|--------------|------------------|-------------------|
 
-### Publishing Workflow
+### Archive Sheet
 
-1. **Test Publishing from Sheet**
-   ```bash
-   ./venv/bin/python test_sheet_publishing.py
-   ```
-   - Interactive script that reads "Daily Post Draft" from your Google Sheet
-   - Choose between X API (immediate) or Typefully (scheduled)
-   - Automatically updates "Publication receipt" column with:
-     - X API: Tweet URL (e.g., `https://twitter.com/username/status/123`)
-     - Typefully: Draft ID (e.g., `Typefully Draft: abc123`)
+Processed posts are moved to an archive sheet with:
+- Essential columns: date, time, author, post_link, content, AI Summary
+- Metadata: Date Processed (UTC), Publication Receipt
 
-2. **Using in Code**
-   ```python
-   from modules.x_publisher import create_publisher, SheetPublisher
-   from modules.sheets_handler import GoogleSheetsHandler
-   
-   # Create publisher (X API or Typefully)
-   publisher = create_publisher('twitter', **credentials)
-   
-   # Wrap with SheetPublisher for receipt tracking
-   sheets = GoogleSheetsHandler(credentials_path, sheet_id)
-   sheet_publisher = SheetPublisher(publisher, sheets)
-   
-   # Publish from specific row
-   result = sheet_publisher.publish_from_sheet(row_number=2)
-   ```
+## 🔄 Complete Workflow
+
+### 1. Discord Collection Phase
+- Connect to Discord bot
+- Fetch messages from specified channel within configured time window
+- Filter for Twitter/X links
+- Extract embedded content (up to 1000 characters)
+- Format as TwitterPost objects
+
+### 2. Sheets Upload Phase
+- Check for existing entries (if duplicate checking enabled)
+- Filter duplicates based on post links
+- Upload new posts to Google Sheets
+- Batch operations for efficiency
+
+### 3. AI Analysis Phase (Optional - requires Gemini API)
+- Analyze posts individually (not in batches) for better rate limit handling
+- 6-second delay between API calls to avoid rate limiting
+- Identify crypto/Web3 projects using AI
+- Generate AI summaries (1-2 sentences) for new projects
+- Mark all analyzed posts as "AI processed" 
+- Posts not identified as projects marked as "Not new project related"
+- Create daily draft post with consolidated project list
+
+### 4. Publishing Phase (Optional - requires X/Typefully API)
+- Read "Daily Post Draft" from sheet
+- Publish to X/Twitter (immediate) or Typefully (scheduled)
+- Track publication receipt (tweet URL or draft ID)
+- Update sheet with receipt
+
+### 5. Archive Phase
+- Move posts marked as "AI processed = TRUE" to Archive sheet
+- Add UTC timestamp for processing date
+- Preserve publication receipts
+- Clear processed posts from main sheet
+
+## 📝 Logging
+
+Logs are stored in the `logs/` directory with daily rotation:
+- `YYYYMMDD.log` - Daily log files
+- Console output for real-time monitoring
+
+Log levels:
+- `INFO`: Normal operations
+- `WARNING`: Recoverable issues
+- `ERROR`: Failures requiring attention
+- `DEBUG`: Detailed troubleshooting
+
+### Sample Pipeline Output
+
+```
+================================================================================
+Daily Pipeline Run - 2024-01-15 20:00:00 (PST)
+================================================================================
+Phase 1: Discord Data Collection (Async)
+  ✅ Fetched 25 Discord messages
+  ✅ Found 18 Twitter/X posts
+  ✅ Saved to: data/discord_posts_20240115_200000.csv
+
+Phase 2: CSV to Google Sheets (Sync)
+  ✅ Uploaded 15 new posts to Sheets (3 duplicates skipped)
+
+Phase 3: Gemini AI Analysis (Sync)
+  ✅ Analyzed 15 posts individually
+  ✅ Found 5 crypto projects
+  ✅ Generated daily draft
+  ⏱️  Analysis time: ~90-180 seconds (6s delay per row)
+
+Phase 4: Publishing (Sync)
+  ✅ Published to X/Twitter
+  📝 Post ID: 123456789
+
+Phase 5: Archive & Cleanup (Sync)
+  ✅ Archived 15 processed posts
+  📊 Total archived: 1,234 posts
+  ✅ CSV moved to: data/processed/
+
+Overall Status: ✅ SUCCESS
+Runtime: 2-3 minutes (depending on number of posts)
+================================================================================
+```
+
+### Performance Notes
+
+- **AI Analysis Speed**: With individual row processing and 6-second delays, expect ~6-12 seconds per post
+- **Total Runtime**: For 20 posts, expect 2-4 minutes total runtime
+- **Rate Limit Safety**: The 6-second delays ensure staying well within Gemini's 15 requests/minute limit
 
 ## 🧪 Testing
 
-### Run All Tests
-```bash
-python run_tests.py
-```
+### Test Individual Components
 
-### Run Unit Tests Only
 ```bash
-python run_tests.py unit
-# or
-./venv/bin/python -m unittest tests.test_discord_handler -v
-```
-
-### Run Integration Tests
-```bash
-# Discord Integration (Requires Discord credentials)
-python run_tests.py integration
-# or
+# Test Discord collection
 ./venv/bin/python test_discord_integration.py
 
-# Google Sheets Integration (Requires credentials.json)
+# Test Google Sheets integration
 ./venv/bin/python test_sheets_integration.py
 
-# Gemini AI Integration (Requires GEMINI_API_KEY)
+# Test Gemini AI analysis
 ./venv/bin/python test_gemini_integration.py
 
-# X API Integration (Requires X API credentials)
-./venv/bin/python test_x_api.py
+# Test individual row analyzer (new)
+./venv/bin/python test_individual_analyzer.py
 
-# Sheet Publishing Integration (Publishes from Google Sheet)
+# Test batch analyzer optimization
+./venv/bin/python test_batch_analyzer.py
+
+# Test X/Twitter publishing
+./venv/bin/python test_x_api.py
 ./venv/bin/python test_sheet_publishing.py
 
-# Archive Handler Testing (Archives processed posts)
+# Test archive system
 ./venv/bin/python test_archive.py
 
-# Complete Workflow Testing (Full pipeline)
+# Test complete workflow
 ./venv/bin/python test_complete_workflow.py
 ```
 
-### Generate CSV Exports for Inspection
+### Run Unit Tests
+
 ```bash
-./venv/bin/python test_discord_integration.py
+# Run all unit tests
+python run_tests.py
+
+# Run specific module tests
+./venv/bin/python -m unittest tests.test_discord_handler -v
+./venv/bin/python -m unittest tests.test_sheets_handler -v
+./venv/bin/python -m unittest tests.test_gemini_analyzer -v
 ```
 
-This will generate:
-- `all_discord_posts_[timestamp].csv` - All available posts (up to 500)
-- `today_posts_[date].csv` - Today's posts only
-- `weekly_posts_[dates].csv` - Last 7 days of posts
-- `recent_posts_sample.csv` - Sample of recent posts
+## 📁 Project Structure
 
-## 📊 Data Format
-
-### TwitterPost Structure
-```python
-@dataclass
-class TwitterPost:
-    date: str         # YYYY-MM-DD format
-    time: str         # HH:MM format
-    content: str      # Full embedded content (up to 1000 chars)
-    post_link: str    # Twitter/X URL
-    author: str       # Discord username
-    author_link: str  # Discord user profile URL
+```
+discord-to-sheets/
+├── main.py                    # Entry point with CLI
+├── config.py                  # Configuration management
+├── requirements.txt           # Dependencies
+├── .env.example              # Environment template
+├── credentials.json          # Google service account key
+├── scheduler_plan.md         # Scheduler implementation plan
+├── modules/
+│   ├── discord_handler.py    # Discord operations
+│   ├── sheets_handler.py     # Google Sheets operations
+│   ├── gemini_analyzer.py    # AI analysis
+│   ├── x_publisher.py        # Publishing functionality
+│   ├── archive_handler.py    # Archive management
+│   ├── workflow_orchestrator.py  # Workflow orchestration
+│   └── scheduler.py          # Main scheduler
+├── utils/
+│   └── logger.py            # Logging configuration
+├── tests/                   # Unit tests
+│   ├── test_discord_handler.py
+│   ├── test_sheets_handler.py
+│   └── test_gemini_analyzer.py
+└── logs/                    # Log files (auto-created)
 ```
 
-### Sample CSV Output
-```csv
-date,time,author,post_link,content,author_link
-2025-08-13,13:46,Web3 Alerts • TweetShift,https://twitter.com/Web3Alerts/status/...,"📈 Trending account alert: [@arc](https://twitter.com/arc) (15.3K followers) is trending among the web3 community
+## 🚨 Troubleshooting
 
-Recently followed by 0xMert_, hasufl, mikedemarais
+### Common Issues
 
-Description: ""Arc is an open Layer-1 blockchain purpose-built for stablecoin finance.""",https://discord.com/users/...
+1. **Discord Bot Not Connecting**
+   - Verify bot token is correct
+   - Ensure bot has proper permissions
+   - Check bot is added to server
+
+2. **Google Sheets Access Denied**
+   - Verify service account has edit access to sheet
+   - Check credentials file path
+   - Ensure Sheets API is enabled
+
+3. **Duplicate Posts**
+   - Enable `DISCORD_SKIP_DUPLICATES=true`
+   - Use `since_last` collection mode
+   - Check sheet for existing entries
+
+4. **Publishing Failures**
+   - Verify API credentials
+   - Check rate limits
+   - Review publication receipt column
+
+5. **Gemini AI Rate Limiting**
+   - The system now uses individual row processing with 6-second delays
+   - If still rate limited, increase delays in gemini_analyzer.py
+   - Set SKIP_AI_ON_RATE_LIMIT=true to continue pipeline when rate limited
+   - Consider reducing GEMINI_DAILY_LIMIT to leave buffer
+
+### Debug Mode
+
+Run with `--debug` flag for detailed logging:
+
+```bash
+python main.py --manual --debug
 ```
 
-## 🎯 Key Features Implemented
+## 🔐 Security Best Practices
 
-### 1. Discord Message Processing
-- Connects to Discord bot and monitors specified channel
-- Filters messages containing Twitter/X links (twitter.com or x.com)
-- Extracts embedded content from TweetShift and other bot messages
+- Never commit `.env` file or `credentials.json`
+- Use environment variables for all sensitive data
+- Rotate API keys regularly
+- Limit bot permissions to required channels only
+- Use read-only Google Sheets scope where possible
+- Store credentials securely
 
-### 2. Content Extraction
-- **Before**: Only captured link text like `[Tweeted](url)`
-- **After**: Extracts full embedded content including:
-  - Project announcements with @handles in Discord markdown format
-  - Follower counts and account age
-  - Bio descriptions
-  - Lists of trending accounts
-  - Alert followers
-  - Multi-paragraph structure preserved with proper newlines
-  - Discord markdown links properly formatted (e.g., `[@username](link)`)
+## 📈 API Rate Limits
 
-### 3. Robust Error Handling
-- Exponential backoff retry for Discord API failures
-- Rate limiting protection
-- Graceful connection/disconnection
-- Comprehensive error logging
+### Discord
+- 50 requests per second per bot
+- Implemented exponential backoff for rate limit handling
 
-### 4. Google Sheets Integration
-- Service account authentication
-- Batch uploads for efficiency (configurable batch size)
-- Multiple modes: append or replace
-- Automatic retry with exponential backoff for rate limits
-- CSV structure validation
-- Duplicate detection via date checking
-- Support for large datasets (tested with 1000+ rows)
+### Google Sheets
+- 100 requests per 100 seconds per user
+- Batch operations to minimize API calls
 
-### 5. AI-Powered Analysis
-- Gemini AI integration for crypto project detection
-- Automatic identification of new Web3/DeFi/NFT projects
-- Twitter/X username and link extraction from embedded content
-- AI-generated project summaries (concise 1-2 sentences)
-- Daily draft creation with formatted project list
-- Smart rate limiting for free tier usage
-- Non-project posts marked as "Not new project related"
-- AI processed column tracks all analyzed rows
+### Gemini AI (Free Tier)
 
-### 6. X/Twitter Publishing
-- X API v2 integration with OAuth 2.0 authentication
-- Automatic thread creation for long content
-- Typefully API support for scheduled posting
-- SheetPublisher wrapper for Google Sheets integration
-- Automatic "Publication receipt" column creation
-- Receipt tracking (tweet URLs for X API, draft IDs for Typefully)
-- Direct publishing from "Daily Post Draft" column in sheet
+#### Rate Limits Table
 
-### 7. Testing & Validation
-- 46 unit tests total (16 Discord + 12 Sheets + 18 Gemini)
-- Integration tests for Discord, Google Sheets, Gemini AI, and X API
-- Sheet publishing test with interactive mode
-- CSV export for manual data inspection
-- Test coverage for edge cases and error scenarios
-- X API permission diagnostic tool
+| Model | RPM (Requests Per Minute) | TPM (Tokens Per Minute) | RPD (Requests Per Day) |
+|-------|---------------------------|-------------------------|------------------------|
+| **Text-output models** | | | |
+| Gemini 2.5 Pro | 5 | 250,000 | 100 |
+| Gemini 2.5 Flash | 10 | 250,000 | 250 |
+| Gemini 2.5 Flash-Lite | 15 | 250,000 | 1,000 |
+| Gemini 2.0 Flash | 15 | 1,000,000 | 200 |
+| Gemini 2.0 Flash-Lite | 30 | 1,000,000 | 200 |
 
-## 📈 Statistics from Current Data
+#### Implementation Details
+- Individual row processing with 6-second delays between API calls
+- Automatic rate limit detection and graceful handling
+- Currently configured to use gemini-2.0-flash-lite model for optimal performance
+- Conservative daily limit of 190 requests to maintain safety buffer
 
-Based on test runs (as of 2025-08-12):
-- **Total Posts Collected**: 299 Twitter/X posts
-- **Date Range**: July 10 - August 11, 2025 (29 days)
-- **Average**: 10.3 posts per day
-- **Top Sources**:
-  - leak.me | Crypto KOL Tracker: 113 posts
-  - ARES Alpha Labs: 105 posts
-  - Web3 Alerts: 81 posts
-
-## 🚦 Next Development Steps
-
-### Phase 1: X (Twitter) Publishing & Archiving
-1. **X API Integration** (`modules/x_publisher.py`)
-   - ✅ Authenticate with X API v2
-   - ✅ Publish Daily Post Draft content
-   - ✅ Handle rate limits and errors
-   - ✅ Return publication status/URL
-
-2. **Archive System** (`modules/archive_handler.py`)
-   - ✅ Move processed posts to Archives sheet
-   - ✅ Clear processed posts from Sheet1
-   - ✅ Add metadata columns:
-     - Date Processed (UTC) - timestamp of archiving
-     - Publication Receipt - link to published tweet/draft
-   - ✅ Maintain data integrity during transfer
-
-3. **Workflow Integration** (`modules/workflow_orchestrator.py`)
-   - ✅ Chain: Analyze → Generate Draft → Publish → Archive
-   - ✅ Modular design supporting optional components
-   - ✅ Comprehensive error handling and logging
-
-### Phase 2: Scheduling & Automation
-1. Implement `scheduler.py` with daily runs
-2. Add manual trigger option
-3. Create systemd service or cron job
-4. Add health checks and monitoring
-5. Integrate full workflow (Discord → Sheets → AI → X → Archive)
-
-### Phase 3: Production Deployment
-1. Implement proper logging (`utils/logger.py`)
-2. Add configuration management
-3. Create main orchestration script (`main.py`)
-4. Set up error notifications
-5. Deploy to server/cloud
-
-### Phase 4: Enhancements
-1. Add data deduplication
-2. Implement data archiving (monthly sheets)
-3. Add analytics/reporting
-4. Create web dashboard (optional)
-5. Add multiple channel support
-6. Multi-language support for summaries
-7. Custom AI prompts per project type
-
-## 🐛 Known Issues & Limitations
-
-1. **Discord API Rate Limits**: Current implementation handles rate limits but may need tuning for larger volumes
-2. **Link Format**: Some Twitter links end with `)` which may need cleaning
-3. **Bot Detection**: Only processes messages from TweetShift and similar bots
-4. **Google Sheets Quotas**: API has daily quota limits (may need monitoring for high volume)
-
-## 📝 Notes for Resuming Development
-
-When you return to this project:
-
-1. **Current State**: Discord handler, Google Sheets handler, and Gemini AI analyzer are all fully functional and tested. The complete data pipeline from Discord to Google Sheets with AI analysis is ready.
-
-2. **Gemini AI Setup**: To use the AI analyzer:
-   - Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
-   - Add `GEMINI_API_KEY` to your `.env` file
-   - Run `python test_gemini_integration.py` to test
-
-3. **Next Priority**: 
-   - Implement X API publishing for Daily Post Draft
-     Or implement Typefully API (below is an example)
-   ```python
-    import requests
-   API_KEY = "XXXXXXXXXXXXXX"
-   headers = {"X-API-KEY": f"Bearer {API_KEY}"}
-   payload = {
-      "content": f"""🚀 New/Trending Projects on 2025-08-11:
-   • @CakeshopApp: Cakeshop is an upcoming iOS app, likely offering an easy-to-use interface for a specific crypto-related task.
-
-   • @hyenatrade: No info yet
-
-   • @ZeroCool_AI: This project aims to build AGI-level vulnerability detection to secure all software.
-
-   • @underscore_hq: Underscore offers an AI-powered wallet for automated DeFi across all protocols, using secure AI agent delegation.""",
-      "schedule-date": "next-free-slot"
-   }
-   r = requests.post("https://api.typefully.com/v1/drafts/", headers=headers, json=payload, timeout=30)
-   r.raise_for_status()
-   print(r.json())
-   ```
-
-   - Create archive system to move processed posts
-   - Add metadata tracking for processed items
-
-4. **Test Data Available**: Run `./venv/bin/python test_discord_integration.py` to generate fresh CSV files with current Discord data.
-
-5. **Architecture Decision**: The modular design allows you to work on each component independently without affecting others.
-
-6. **Configuration**: Discord, Google Sheets, and Gemini AI credentials are all working correctly. Channel `#💎-early-alpha` (ID: 1392132542877929472) is being monitored successfully, data can be uploaded to your Google Sheet, and AI analysis can identify new crypto projects.
-
-## 📚 References
-
-- [Discord.py Documentation](https://discordpy.readthedocs.io/)
-- [Google Sheets API Python Quickstart](https://developers.google.com/sheets/api/quickstart/python)
-- [Google AI Studio - Gemini API](https://makersuite.google.com/app/apikey)
-- [Project Guidelines (CLAUDE.md)](./CLAUDE.md)
+### X/Twitter
+- 50 posts per day
+- 5 posts per 15 minutes
+- Rate limit tracking in publisher
 
 ## 🤝 Contributing
 
-This is a private project. All development guidelines are documented in `CLAUDE.md`.
+1. Fork the repository
+2. Create a feature branch
+3. Follow guidelines in `CLAUDE.md`
+4. Add tests for new features
+5. Submit a pull request
 
 ## 📄 License
 
-Private project - All rights reserved
+MIT License - see LICENSE file for details
+
+## 🙏 Acknowledgments
+
+- Discord.py for Discord API wrapper
+- Google APIs for Sheets integration
+- Google Gemini for AI analysis
+- Tweepy for X/Twitter integration
+- Schedule library for task scheduling
+
+## 📮 Support
+
+For issues, questions, or suggestions:
+- Open an issue on GitHub
+- Check existing issues for solutions
+- Review logs for error details
+
+## 📚 References
+
+### API Documentation
+- [Gemini API Rate Limits (Free Tier)](https://ai.google.dev/gemini-api/docs/rate-limits#free-tier)
+- [Gemini API Pricing](https://ai.google.dev/gemini-api/docs/pricing)
+
+### Other Resources
+- [Discord Developer Portal](https://discord.com/developers/applications)
+- [Google Cloud Console](https://console.cloud.google.com)
+- [Google Sheets API Documentation](https://developers.google.com/sheets/api)
+- [Twitter/X API Documentation](https://developer.twitter.com/en/docs)
+- [Typefully API Documentation](https://support.typefully.com/en/articles/8718287-typefully-api)
 
 ---
 
-*Last Updated: 2025-08-18 by Claude (AI Assistant)*  
-*Session Summary: Implemented complete Archive Handler module for managing processed posts. Archives posts marked with "AI processed = TRUE" to Archives sheet with UTC timestamps and publication receipts. Removes archived posts from Sheet1 and clears processing columns. Created Workflow Orchestrator for complete pipeline integration (Analysis → Publishing → Archiving). Added comprehensive test scripts for archive functionality and complete workflow testing. Archives sheet appends data to preserve historical records.*
+**Note**: This bot is designed for personal/research use. Ensure compliance with Discord, Twitter/X, and Google's Terms of Service when deploying.
+
+## 📊 Current Implementation Status
+
+### ✅ Completed Components
+
+1. **Core Modules**
+   - Discord Handler: Full Twitter/X post extraction with embedded content
+   - Sheets Handler: Batch operations with retry logic
+   - Gemini Analyzer: AI-powered project detection with individual row processing
+   - X Publisher: Twitter and Typefully API integration
+   - Archive Handler: Automated post archiving with metadata
+   - Workflow Orchestrator: Complete pipeline orchestration
+   - Scheduler: Flexible scheduling with multiple collection modes
+
+2. **Entry Point**
+   - Main.py: CLI interface with multiple run modes
+   - Config.py: Comprehensive configuration management
+   - Logger: Daily rotating log files
+
+3. **Testing**
+   - 46+ unit tests across all modules
+   - Integration tests for each component
+   - Complete workflow testing scripts
+   - Individual row analyzer test suite
+   - Rate limit handling tests
+
+### 🎯 Ready for Production
+
+The bot is fully functional and ready for deployment. All core features have been implemented and tested:
+
+- ✅ Automated daily scheduling
+- ✅ Manual execution mode
+- ✅ Complete data pipeline
+- ✅ Error handling and recovery
+- ✅ Comprehensive logging
+- ✅ Flexible configuration
+
+Start collecting, analyzing, and publishing your Discord Twitter/X posts today!
+
+## 📝 Recent Updates
+
+### Version 2.0.1 (2025-08-23)
+
+**Major Improvements:**
+- 🌍 **Dynamic Timezone Support**: 
+  - Convert Discord UTC timestamps to local timezone automatically
+  - Display dynamic timezone in column headers (e.g., "Time (UTC+8)", "Time (PST)")
+  - Added timezone detection utility for both named zones and UTC offsets
+- 🔧 **Fixed Case-Sensitive Column Lookups**: 
+  - All column name comparisons now case-insensitive throughout codebase
+  - Prevents errors from inconsistent column name casing
+- 🤖 **Fixed Gemini Analyzer Initialization**: 
+  - Pass model and daily_limit parameters correctly in scheduler
+  - Fixed manual mode AI analysis failures
+  - Updated daily draft format to remove unsupported markdown links
+
+**Documentation Updates:**
+- 📊 **Added Gemini API Rate Limits Table**: Comprehensive table showing RPM, TPM, and RPD limits for all Gemini models in free tier
+- 📚 **Added References Section**: Centralized API documentation links for Gemini, Discord, Google Sheets, and other services
+
+**Files Modified:**
+- `utils/timezone_utils.py`: New utility module for timezone handling
+- `modules/discord_handler.py`: Convert timestamps from UTC to local
+- `modules/scheduler.py`: Dynamic timezone headers and Gemini init fix
+- `modules/archive_handler.py`: Dynamic timezone in Archive sheets
+- `modules/gemini_analyzer.py`: Case-insensitive column handling
+- `main.py`: Improved logging configuration
+
+### Version 2.0.0 (2025-08-22)
+
+**Major Architecture Changes:**
+- 🔄 **Redesigned Scheduler**: Clean separation of async Discord operations and sync processing
+- 📁 **CSV Intermediate Storage**: Discord data saved to CSV files before processing
+- 🎯 **Individual Row Processing**: Replaced batch analysis with one-by-one processing
+- ⏱️ **Rate Limit Protection**: Added 6-second delays between Gemini API calls
+- 🚀 **Model Upgrade**: Now supports gemini-2.0-flash-lite for better performance
+
+**Improvements:**
+- Better error handling and recovery from rate limits
+- More reliable pipeline execution with isolated async contexts
+- Simplified architecture removing complex orchestration layers
+- Enhanced logging for debugging rate limit issues
+
+**Configuration Updates:**
+- Added `SKIP_AI_ON_RATE_LIMIT` option to continue pipeline when rate limited
+- Updated default model to `gemini-2.0-flash-lite`
+- Reduced default daily limit to 190 requests for safety buffer

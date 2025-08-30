@@ -3,7 +3,8 @@
 import re
 import asyncio
 import logging
-from datetime import datetime, timedelta
+import time
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from dataclasses import dataclass
 
@@ -43,6 +44,7 @@ class DiscordHandler:
         self.channel_id = int(channel_id)
         self.bot = None
         self._ready = False
+        self._bot_task = None
         
     async def initialize_bot(self) -> None:
         """Initialize and start the Discord bot."""
@@ -59,19 +61,28 @@ class DiscordHandler:
             
     async def connect(self) -> None:
         """Connect to Discord and wait for bot to be ready."""
+        logger.debug("Starting Discord connection...")
         if not self.bot:
+            logger.debug("Initializing bot...")
             await self.initialize_bot()
-            
-        asyncio.create_task(self.bot.start(self.token))
+        
+        # Start the bot in the background
+        logger.debug("Starting bot task...")
+        self._bot_task = asyncio.create_task(self.bot.start(self.token))
         
         # Wait for bot to be ready
+        logger.debug("Waiting for bot to be ready...")
         retry_count = 0
         while not self._ready and retry_count < 30:
             await asyncio.sleep(1)
             retry_count += 1
+            if retry_count % 5 == 0:
+                logger.debug(f"Still waiting for bot... ({retry_count}s)")
             
         if not self._ready:
             raise TimeoutError("Failed to connect to Discord within 30 seconds")
+        
+        logger.debug("Discord connection successful")
             
     async def disconnect(self) -> None:
         """Disconnect from Discord."""
@@ -177,7 +188,15 @@ class DiscordHandler:
         Returns:
             TwitterPost object with extracted data
         """
-        created_at = message.created_at
+        # Discord message.created_at is in UTC, convert to local time
+        created_at_utc = message.created_at
+        # Convert UTC to local time by adding the local timezone offset
+        # time.timezone gives offset in seconds (negative for timezones ahead of UTC)
+        created_at = created_at_utc + timedelta(seconds=-time.timezone)
+        # If DST is active, adjust for it
+        if time.daylight and time.localtime().tm_isdst:
+            created_at = created_at + timedelta(seconds=time.altzone - time.timezone)
+        
         twitter_link = self.extract_twitter_link(message.content)
         
         # Extract content from embed if available (for TweetShift embeds)

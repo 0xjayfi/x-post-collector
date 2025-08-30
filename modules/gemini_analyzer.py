@@ -170,6 +170,8 @@ Criteria for NO:
 - Price talk about existing tokens
 - News about established projects
 - Personal opinions without new project info"""
+
+        logger.debug(f"Project detection prompt: {prompt}")
         
         try:
             response = self._make_request(prompt, temperature=0.1)
@@ -279,52 +281,72 @@ Keep under 20 words. Be specific and informative. If you cannot provide a summar
             logger.error(f"Error generating summary: {e}")
             return "Summary generation failed"
     
-    def batch_analyze_projects(self, posts: List[Tuple[int, Dict]]) -> List[Tuple[int, bool]]:
+    def analyze_single_row(self, row_idx: int, post_data: Dict) -> Tuple[Optional[ProjectSummary], str]:
         """
-        Analyze multiple posts in a single API call to save quota
+        Analyze a single row for new project detection with 6-second delays between API calls
         
         Args:
-            posts: List of (row_index, post_data) tuples
+            row_idx: Row index in the sheet
+            post_data: Dictionary containing 'content', 'post_link', 'date'
             
         Returns:
-            List of (row_index, is_new_project) tuples
+            Tuple of (ProjectSummary if new project, AI summary string)
         """
-        if not posts:
-            return []
+        content = post_data.get('content', '')
+        date = post_data.get('date', '')
         
-        # Build combined prompt
-        post_texts = []
-        for idx, (row_idx, post) in enumerate(posts[:5]):  # Max 5 per batch
-            content = post.get('content', '')[:200]  # Limit content length
-            post_texts.append(f"Post {idx + 1}: {content}")
-        
-        combined_prompt = f"""Analyze each post below. For each, respond YES if it's about a new crypto project, NO otherwise.
-
-{chr(10).join(post_texts)}
-
-Response format (one per line):
-Post 1: YES/NO
-Post 2: YES/NO
-..."""
+        if not content:
+            return None, "Not new project related"
         
         try:
-            response = self._make_request(combined_prompt, temperature=0.1)
-            results = []
+            # Step 1: Check if it's a new project
+            logger.debug(f"Analyzing row {row_idx}: Checking if new project...")
+            is_new = self.is_new_project(content)
             
-            lines = response.strip().split('\n')
-            for i, (row_idx, _) in enumerate(posts[:5]):
-                if i < len(lines):
-                    line = lines[i].upper()
-                    is_project = "YES" in line
-                    results.append((row_idx, is_project))
+            # Step 2: Wait 6 seconds after first API call
+            logger.debug(f"Row {row_idx}: Waiting 6 seconds after new project check...")
+            time.sleep(6)
+            
+            if is_new:
+                logger.debug(f"Row {row_idx}: Identified as new project")
+                
+                # Step 3: Extract project info and generate summary
+                project_info = self.extract_project_info(content)
+                
+                if project_info:
+                    # Generate summary (another API call)
+                    ai_summary = self.generate_summary(content, project_info.bio)
+                    
+                    # Step 4: Wait 6 seconds after second API call
+                    logger.debug(f"Row {row_idx}: Waiting 6 seconds after summary generation...")
+                    time.sleep(6)
+                    
+                    summary = ProjectSummary(
+                        date=date,
+                        project_info=project_info,
+                        ai_summary=ai_summary,
+                        row_index=row_idx
+                    )
+                    
+                    logger.info(f"Row {row_idx}: New project @{project_info.username} - {ai_summary[:50]}...")
+                    return summary, ai_summary
                 else:
-                    results.append((row_idx, False))
-            
-            return results
+                    logger.debug(f"Row {row_idx}: Could not extract project info")
+                    # Step 4: Wait even if extraction failed
+                    logger.debug(f"Row {row_idx}: Waiting 6 seconds after project info extraction...")
+                    time.sleep(6)
+                    return None, "Not new project related"
+            else:
+                logger.debug(f"Row {row_idx}: Not a new project")
+                return None, "Not new project related"
+                
         except Exception as e:
-            logger.error(f"Error in batch analysis: {e}")
-            # Return all as False on error
-            return [(row_idx, False) for row_idx, _ in posts[:5]]
+            if "RATE_LIMITED" in str(e):
+                logger.error(f"Rate limited at row {row_idx}")
+                raise
+            else:
+                logger.error(f"Error analyzing row {row_idx}: {e}")
+                return None, "Analysis failed"
     
     def create_daily_draft(self, summaries: List[ProjectSummary]) -> str:
         """
@@ -355,10 +377,12 @@ Post 2: YES/NO
             
             for project in projects:
                 username = project.project_info.username
-                link = project.project_info.twitter_link
+                #link = project.project_info.twitter_link
                 summary = project.ai_summary
                 
-                line = f"☘️ [@{username}]({link}): {summary}\n"
+                line = f"☘️ @{username}: {summary}\n" 
+                # markdown format, not supported by either X or Typefully
+                # line = f"☘️ [@{username}]({link}): {summary}\n"
                 draft_lines.append(line)
             
             draft_lines.append("")  # Empty line between dates
@@ -399,13 +423,14 @@ class SheetAnalyzer:
             ai_processed_col = -1
             daily_draft_col = -1
             
-            # Check for existing columns
+            # Check for existing columns (case-insensitive)
             for i, header in enumerate(headers):
-                if header == 'AI Summary':
+                header_lower = header.lower()
+                if header_lower == 'ai summary':
                     ai_summary_col = i
-                elif header == 'AI processed':
+                elif header_lower == 'ai processed':
                     ai_processed_col = i
-                elif header == 'Daily Post Draft':
+                elif header_lower == 'daily post draft':
                     daily_draft_col = i
             
             # Check if columns need to be added
@@ -465,7 +490,7 @@ class SheetAnalyzer:
     
     def analyze_all_rows(self) -> Tuple[List[ProjectSummary], List[Tuple[int, str]]]:
         """
-        Process all rows efficiently with rate limiting
+        Process all rows individually with delays to avoid rate limiting
         
         Returns:
             Tuple of (List of project summaries, List of all processed rows with AI summaries)
@@ -484,19 +509,40 @@ class SheetAnalyzer:
             headers = rows[0]
             data_rows = rows[1:]
             
-            # Find column indices
-            content_idx = headers.index('content') if 'content' in headers else 4
-            post_link_idx = headers.index('post_link') if 'post_link' in headers else 3
-            date_idx = headers.index('date') if 'date' in headers else 0
+            # Find column indices (case-insensitive)
+            # Convert headers to lowercase for comparison
+            headers_lower = [h.lower() for h in headers]
+            content_idx = headers_lower.index('content') if 'content' in headers_lower else 4
+            post_link_idx = headers_lower.index('post link') if 'post link' in headers_lower else 3
+            date_idx = headers_lower.index('date') if 'date' in headers_lower else 0
             
-            # Check for AI Summary column
-            ai_summary_idx = headers.index('AI Summary') if 'AI Summary' in headers else -1
+            # Check for AI Summary column (case-insensitive)
+            ai_summary_idx = -1
+            for idx, header in enumerate(headers):
+                if header.lower() == 'ai summary':
+                    ai_summary_idx = idx
+                    break
             
-            # Batch process rows
-            batch = []
+            # Check for AI processed column to skip already processed rows (case-insensitive)
+            ai_processed_idx = -1
+            for idx, header in enumerate(headers):
+                if header.lower() == 'ai processed':
+                    ai_processed_idx = idx
+                    break
+            
+            # Process rows individually
+            skipped_count = 0
+            processed_count = 0
+            
+            logger.info(f"Starting individual row analysis for {len(data_rows)} rows")
+            
             for row_idx, row in enumerate(data_rows, start=2):  # Start from row 2 (after header)
-                # Skip if already analyzed
+                # Skip if already analyzed (check both AI Summary and AI processed columns)
                 if ai_summary_idx >= 0 and len(row) > ai_summary_idx and row[ai_summary_idx]:
+                    skipped_count += 1
+                    continue
+                if ai_processed_idx >= 0 and len(row) > ai_processed_idx and row[ai_processed_idx] == 'TRUE':
+                    skipped_count += 1
                     continue
                 
                 # Get row data safely
@@ -505,79 +551,52 @@ class SheetAnalyzer:
                 date = row[date_idx] if len(row) > date_idx else ""
                 
                 if content and post_link:
-                    batch.append((row_idx, {
-                        'content': content,
-                        'post_link': post_link,
-                        'date': date
-                    }))
-                
-                # Process batch when full or at end
-                if len(batch) >= 5:
-                    batch_summaries, batch_processed = self._process_batch(batch)
-                    summaries.extend(batch_summaries)
-                    all_processed_rows.extend(batch_processed)
-                    batch = []
-                    time.sleep(4)  # Rate limiting between batches
+                    try:
+                        # Analyze single row with built-in delays
+                        logger.info(f"Processing row {row_idx} ({processed_count + 1} of {len(data_rows) - skipped_count})")
+                        
+                        post_data = {
+                            'content': content,
+                            'post_link': post_link,
+                            'date': date
+                        }
+                        
+                        # Analyze the row (includes 4-second delays between API calls)
+                        project_summary, ai_summary = self.gemini.analyze_single_row(row_idx, post_data)
+                        
+                        # Record the result
+                        all_processed_rows.append((row_idx, ai_summary))
+                        
+                        if project_summary:
+                            summaries.append(project_summary)
+                        
+                        processed_count += 1
+                        
+                        # Log progress every 5 rows
+                        if processed_count % 5 == 0:
+                            logger.info(f"Progress: {processed_count} rows analyzed, {len(summaries)} new projects found")
+                        
+                    except Exception as e:
+                        if "RATE_LIMITED" in str(e):
+                            logger.warning(f"Rate limited after processing {processed_count} rows")
+                            # Return what we have so far
+                            break
+                        else:
+                            logger.error(f"Error processing row {row_idx}: {e}")
+                            # Mark as failed but continue
+                            all_processed_rows.append((row_idx, "Analysis failed"))
             
-            # Process remaining batch
-            if batch:
-                batch_summaries, batch_processed = self._process_batch(batch)
-                summaries.extend(batch_summaries)
-                all_processed_rows.extend(batch_processed)
+            if skipped_count > 0:
+                logger.info(f"Skipped {skipped_count} already processed rows")
             
-            logger.info(f"Analyzed {len(all_processed_rows)} rows, found {len(summaries)} new projects")
+            logger.info(f"Completed: Analyzed {processed_count} new rows, found {len(summaries)} new projects")
             return summaries, all_processed_rows
             
         except Exception as e:
             logger.error(f"Error analyzing rows: {e}")
             return summaries, all_processed_rows
     
-    def _process_batch(self, batch: List[Tuple[int, Dict]]) -> Tuple[List[ProjectSummary], List[Tuple[int, str]]]:
-        """
-        Process a batch of rows
-        
-        Args:
-            batch: List of (row_index, row_data) tuples
-            
-        Returns:
-            Tuple of (List of project summaries, List of (row_index, ai_summary) for all processed rows)
-        """
-        summaries = []
-        all_processed = []  # Track all processed rows, including non-projects
-        
-        # First, batch check which are new projects
-        project_checks = self.gemini.batch_analyze_projects(batch)
-        
-        # Process each row
-        for (row_idx, is_project), (_, row_data) in zip(project_checks, batch):
-            if is_project:
-                content = row_data['content']
-                date = row_data['date']
-                
-                # Extract project info from content (contains embedded Twitter/X info)
-                project_info = self.gemini.extract_project_info(content)
-                if project_info:
-                    # Generate summary
-                    ai_summary = self.gemini.generate_summary(content, project_info.bio)
-                    
-                    summaries.append(ProjectSummary(
-                        date=date,
-                        project_info=project_info,
-                        ai_summary=ai_summary,
-                        row_index=row_idx
-                    ))
-                    
-                    all_processed.append((row_idx, ai_summary))
-                    logger.debug(f"Processed project at row {row_idx}: {project_info.username}")
-                else:
-                    # Failed to extract project info, mark as not project related
-                    all_processed.append((row_idx, "Not new project related"))
-            else:
-                # Not a new project
-                all_processed.append((row_idx, "Not new project related"))
-                logger.debug(f"Row {row_idx} marked as not new project related")
-        
-        return summaries, all_processed
+    # Removed _process_batch method as we're no longer doing batch processing
     
     def write_summaries(self, all_processed: List[Tuple[int, str]], ai_summary_col: int, ai_processed_col: int):
         """
