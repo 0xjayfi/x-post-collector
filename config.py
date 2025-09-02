@@ -132,6 +132,7 @@ BATCH_SIZE = 100  # Maximum messages to process at once
 GEMINI_API_KEY: Optional[str] = os.getenv('GEMINI_API_KEY')
 GEMINI_MODEL: str = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
 GEMINI_DAILY_LIMIT: int = int(os.getenv('GEMINI_DAILY_LIMIT', '1400'))
+GEMINI_GENERATION_MODE: str = os.getenv('GEMINI_GENERATION_MODE', 'summary')  # 'summary' or 'keywords'
 
 # X API Configuration
 X_API_KEY: Optional[str] = os.getenv('X_API_KEY')

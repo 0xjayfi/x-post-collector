@@ -6,7 +6,7 @@ An automated pipeline that collects Twitter/X posts from Discord channels and pr
 
 - **Discord Data Collection**: Automatically fetch Twitter/X posts from specified Discord channels
 - **Google Sheets Integration**: Store and manage posts in Google Sheets
-- **AI Analysis**: Analyze posts using Google's Gemini AI to identify crypto projects and generate summaries
+- **AI Analysis**: Analyze posts using Google's Gemini AI to identify crypto projects and generate summaries or keywords
 - **Automated Publishing**: Publish daily summaries to X/Twitter or Typefully
 - **Archive System**: Automatically archive processed posts with publication tracking
 - **Flexible Scheduling**: Run manually or on a daily schedule with timezone support
@@ -117,6 +117,7 @@ GEMINI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-2.0-flash-lite  # Latest model for better performance
 GEMINI_DAILY_LIMIT=190              # Conservative limit for free tier
 SKIP_AI_ON_RATE_LIMIT=true         # Continue pipeline if rate limited
+GEMINI_GENERATION_MODE=summary     # 'summary' or 'keywords'
 
 # Publishing (optional)
 PUBLISHER_TYPE=twitter  # or 'typefully'
@@ -141,6 +142,29 @@ ARCHIVE_BATCH_SIZE=50
 - **`daily`**: Collect posts from the last N days
 - **`hours`**: Collect posts from the last N hours
 - **`since_last`**: Collect posts since the last entry in Google Sheets
+
+### AI Generation Modes
+
+The Gemini AI analyzer supports two generation modes:
+
+#### Summary Mode (Default)
+- Generates 1-2 sentence descriptions of crypto projects
+- Focuses on what the project does, key innovations, and use cases
+- Ideal for creating informative daily summaries
+- Example output: "Decentralized exchange aggregator optimizing trades across multiple chains for minimal slippage"
+
+#### Keywords Mode
+- Extracts 3-5 descriptive keywords for each project
+- Focuses on project type, sector, technology, and key features
+- Ideal for quick categorization and trend analysis
+- Example output: "DeFi, cross-chain, liquidity aggregator, automated trading, MEV protection"
+
+To switch between modes, set `GEMINI_GENERATION_MODE` in your `.env` file:
+```env
+GEMINI_GENERATION_MODE=summary  # Default: generates summaries
+# or
+GEMINI_GENERATION_MODE=keywords  # Generates keywords instead
+```
 
 ## 🎮 Usage
 
@@ -203,8 +227,10 @@ options:
 
 The main sheet should have these columns:
 
-| Date | Time | Content | Post Link | Author | Author Link | AI Summary | AI Processed | Daily Post Draft | Publication Receipt |
-|------|------|---------|-----------|--------|-------------|------------|--------------|------------------|-------------------|
+| Date | Time | Content | Post Link | Author | Author Link | AI Summary | AI Keywords* | AI Processed | Daily Post Draft | Publication Receipt |
+|------|------|---------|-----------|--------|-------------|------------|--------------|--------------|------------------|-------------------|
+
+*AI Keywords column is automatically created when using `GEMINI_GENERATION_MODE=keywords`
 
 ### Archive Sheet
 
@@ -231,10 +257,12 @@ Processed posts are moved to an archive sheet with:
 - Analyze posts individually (not in batches) for better rate limit handling
 - 6-second delay between API calls to avoid rate limiting
 - Identify crypto/Web3 projects using AI
-- Generate AI summaries (1-2 sentences) for new projects
+- Generate AI summaries (1-2 sentences) OR keywords (3-5 descriptive terms) based on configuration
 - Mark all analyzed posts as "AI processed" 
 - Posts not identified as projects marked as "Not new project related"
 - Create daily draft post with consolidated project list
+  - Summary mode: Shows project descriptions
+  - Keywords mode: Shows keywords in brackets [DeFi, yield farming, cross-chain]
 
 ### 4. Publishing Phase (Optional - requires X/Typefully API)
 - Read "Daily Post Draft" from sheet
@@ -534,6 +562,33 @@ The bot is fully functional and ready for deployment. All core features have bee
 Start collecting, analyzing, and publishing your Discord Twitter/X posts today!
 
 ## 📝 Recent Updates
+
+### Version 2.0.2 (2025-09-02)
+
+**New Features:**
+- 🔑 **Keyword Generation Mode**: 
+  - New AI analysis mode to generate 3-5 descriptive keywords instead of summaries
+  - Configurable via `GEMINI_GENERATION_MODE` environment variable
+  - Choose between `summary` (default) or `keywords` mode
+  - Automatically creates "AI Keywords" column when in keywords mode
+  - Daily drafts format keywords in brackets: `[DeFi, yield farming, automated]`
+  
+**Improvements:**
+- 🔧 **Fixed Configuration Passing**: 
+  - Fixed `GEMINI_GENERATION_MODE` and `GEMINI_DAILY_LIMIT` not being passed to scheduler
+  - All Gemini configuration values now properly propagated through the pipeline
+  
+**Backward Compatibility:**
+- ✅ Default behavior unchanged (summary generation)
+- ✅ Existing sheets continue to work without modification
+- ✅ All new features are opt-in via configuration
+
+**Files Modified:**
+- `modules/gemini_analyzer.py`: Added `generate_keywords()` method and mode handling
+- `config.py`: Added `GEMINI_GENERATION_MODE` configuration
+- `main.py`: Fixed config dict to include all Gemini settings
+- `modules/scheduler.py`: Updated to pass generation mode to analyzer
+- `.env.example`: Added documentation for new configuration option
 
 ### Version 2.0.1 (2025-08-23)
 

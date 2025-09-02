@@ -192,7 +192,8 @@ class SequentialProcessor:
                 self.gemini_analyzer = GeminiAnalyzer(
                     api_key=gemini_key,
                     model=config.get('GEMINI_MODEL', 'gemini-1.5-flash'),
-                    daily_limit=int(config.get('GEMINI_DAILY_LIMIT', 1400))
+                    daily_limit=int(config.get('GEMINI_DAILY_LIMIT', 1400)),
+                    generation_mode=config.get('GEMINI_GENERATION_MODE', 'summary')
                 )
                 logger.info("Gemini analyzer initialized")
             except Exception as e:
@@ -396,9 +397,9 @@ class SequentialProcessor:
                 # Create SheetAnalyzer
                 analyzer = SheetAnalyzer(self.sheets, self.gemini_analyzer)
                 
-                # Ensure columns exist
-                ai_summary_col, ai_processed_col, daily_draft_col = analyzer.ensure_columns_exist()
-                logger.info(f"AI columns: summary={ai_summary_col}, processed={ai_processed_col}, draft={daily_draft_col}")
+                # Ensure columns exist (now returns 4 values)
+                ai_summary_col, ai_processed_col, daily_draft_col, ai_keywords_col = analyzer.ensure_columns_exist()
+                logger.info(f"AI columns: summary={ai_summary_col}, processed={ai_processed_col}, draft={daily_draft_col}, keywords={ai_keywords_col}")
                 
                 # Analyze all unprocessed rows
                 project_summaries, all_processed = analyzer.analyze_all_rows()
@@ -408,8 +409,8 @@ class SequentialProcessor:
                 
                 # Write summaries and mark processed
                 if all_processed:
-                    analyzer.write_summaries(all_processed, ai_summary_col, ai_processed_col)
-                    logger.info(f"Wrote {len(all_processed)} AI summaries/statuses")
+                    analyzer.write_summaries(all_processed, ai_summary_col, ai_processed_col, ai_keywords_col)
+                    logger.info(f"Wrote {len(all_processed)} AI analyses/statuses")
                 
                 # Generate and write daily draft
                 if project_summaries:

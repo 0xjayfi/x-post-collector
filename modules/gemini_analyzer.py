@@ -32,6 +32,7 @@ class ProjectSummary:
     project_info: ProjectInfo
     ai_summary: str
     row_index: int
+    keywords: Optional[str] = None  # Optional keywords field
 
 
 class RateLimitManager:
@@ -94,7 +95,7 @@ class RateLimitManager:
 class GeminiAnalyzer:
     """Handles Gemini AI operations for content analysis"""
     
-    def __init__(self, api_key: str, model: str = 'gemini-1.5-flash', daily_limit: int = 1400):
+    def __init__(self, api_key: str, model: str = 'gemini-1.5-flash', daily_limit: int = 1400, generation_mode: str = 'summary'):
         """
         Initialize Gemini analyzer
         
@@ -102,11 +103,13 @@ class GeminiAnalyzer:
             api_key: Google AI Studio API key
             model: Gemini model to use (default: gemini-1.5-flash for free tier)
             daily_limit: Daily request limit for rate limiting
+            generation_mode: Generation mode ('summary' or 'keywords', default: 'summary')
         """
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel(model)
         self.rate_limiter = RateLimitManager(daily_limit)
-        logger.info(f"Initialized GeminiAnalyzer with model: {model}")
+        self.generation_mode = generation_mode
+        logger.info(f"Initialized GeminiAnalyzer with model: {model}, mode: {generation_mode}")
     
     def _make_request(self, prompt: str, temperature: float = 0.3) -> str:
         """Make a rate-limited request to Gemini API"""
@@ -281,6 +284,50 @@ Keep under 20 words. Be specific and informative. If you cannot provide a summar
             logger.error(f"Error generating summary: {e}")
             return "Summary generation failed"
     
+    def generate_keywords(self, content: str, bio: str) -> str:
+        """
+        Generate 3-5 keywords that best describe the project
+        
+        Args:
+            content: Original post content
+            bio: Project bio/description
+            
+        Returns:
+            Comma-separated keywords string
+        """
+        # Truncate inputs for token efficiency
+        content = content[:500] if len(content) > 500 else content
+        bio = bio[:300] if len(bio) > 300 else bio
+        
+        prompt = f"""Extract 3-5 keywords that best describe this crypto project.
+
+Post: {content}
+Bio/Description: {bio}
+
+Requirements:
+- Generate EXACTLY 3-5 keywords
+- Focus on: project type, sector, technology, use case, and key features
+- Be specific and relevant to crypto/Web3 space
+- Return ONLY the keywords separated by commas
+- No explanations, just keywords
+
+Example format: DeFi, yield farming, automated, cross-chain, liquidity"""
+        
+        try:
+            keywords = self._make_request(prompt, temperature=0.2)
+            keywords = keywords.strip()
+            # Clean up and validate keywords
+            keyword_list = [k.strip() for k in keywords.split(',')]
+            # Ensure we have 3-5 keywords
+            if len(keyword_list) < 3:
+                return "crypto, Web3, project"
+            elif len(keyword_list) > 5:
+                keyword_list = keyword_list[:5]
+            return ", ".join(keyword_list)
+        except Exception as e:
+            logger.error(f"Error generating keywords: {e}")
+            return "crypto, Web3, project"
+    
     def analyze_single_row(self, row_idx: int, post_data: Dict) -> Tuple[Optional[ProjectSummary], str]:
         """
         Analyze a single row for new project detection with 6-second delays between API calls
@@ -290,7 +337,7 @@ Keep under 20 words. Be specific and informative. If you cannot provide a summar
             post_data: Dictionary containing 'content', 'post_link', 'date'
             
         Returns:
-            Tuple of (ProjectSummary if new project, AI summary string)
+            Tuple of (ProjectSummary if new project, AI analysis string)
         """
         content = post_data.get('content', '')
         date = post_data.get('date', '')
@@ -310,25 +357,33 @@ Keep under 20 words. Be specific and informative. If you cannot provide a summar
             if is_new:
                 logger.debug(f"Row {row_idx}: Identified as new project")
                 
-                # Step 3: Extract project info and generate summary
+                # Step 3: Extract project info and generate analysis
                 project_info = self.extract_project_info(content)
                 
                 if project_info:
-                    # Generate summary (another API call)
-                    ai_summary = self.generate_summary(content, project_info.bio)
+                    # Generate analysis based on mode (another API call)
+                    if self.generation_mode == 'keywords':
+                        ai_analysis = self.generate_keywords(content, project_info.bio)
+                        keywords = ai_analysis
+                        ai_summary = f"Keywords: {ai_analysis}"  # For backward compatibility
+                    else:  # Default to summary mode
+                        ai_analysis = self.generate_summary(content, project_info.bio)
+                        keywords = None
+                        ai_summary = ai_analysis
                     
                     # Step 4: Wait 6 seconds after second API call
-                    logger.debug(f"Row {row_idx}: Waiting 6 seconds after summary generation...")
+                    logger.debug(f"Row {row_idx}: Waiting 6 seconds after {self.generation_mode} generation...")
                     time.sleep(6)
                     
                     summary = ProjectSummary(
                         date=date,
                         project_info=project_info,
                         ai_summary=ai_summary,
-                        row_index=row_idx
+                        row_index=row_idx,
+                        keywords=keywords
                     )
                     
-                    logger.info(f"Row {row_idx}: New project @{project_info.username} - {ai_summary[:50]}...")
+                    logger.info(f"Row {row_idx}: New project @{project_info.username} - {ai_analysis[:50]}...")
                     return summary, ai_summary
                 else:
                     logger.debug(f"Row {row_idx}: Could not extract project info")
@@ -378,11 +433,16 @@ Keep under 20 words. Be specific and informative. If you cannot provide a summar
             for project in projects:
                 username = project.project_info.username
                 #link = project.project_info.twitter_link
-                summary = project.ai_summary
                 
-                line = f"☘️ @{username}: {summary}\n" 
+                # Use keywords if available and in keywords mode, otherwise use summary
+                if self.generation_mode == 'keywords' and project.keywords:
+                    content = f"[{project.keywords}]"
+                else:
+                    content = project.ai_summary
+                
+                line = f"☘️ @{username}: {content}\n" 
                 # markdown format, not supported by either X or Typefully
-                # line = f"☘️ [@{username}]({link}): {summary}\n"
+                # line = f"☘️ [@{username}]({link}): {content}\n"
                 draft_lines.append(line)
             
             draft_lines.append("")  # Empty line between dates
@@ -403,14 +463,15 @@ class SheetAnalyzer:
         """
         self.sheets = sheets_handler
         self.gemini = gemini_analyzer
-        logger.info("Initialized SheetAnalyzer")
+        self.generation_mode = gemini_analyzer.generation_mode
+        logger.info(f"Initialized SheetAnalyzer with generation mode: {self.generation_mode}")
     
-    def ensure_columns_exist(self) -> Tuple[int, int, int]:
+    def ensure_columns_exist(self) -> Tuple[int, int, int, int]:
         """
-        Add AI Summary, AI processed, and Daily Post Draft columns if missing
+        Add AI Summary/Keywords, AI processed, and Daily Post Draft columns if missing
         
         Returns:
-            Tuple of (ai_summary_col_index, ai_processed_col_index, daily_draft_col_index)
+            Tuple of (ai_summary_col_index, ai_processed_col_index, daily_draft_col_index, ai_keywords_col_index)
         """
         try:
             # Get current headers
@@ -420,6 +481,7 @@ class SheetAnalyzer:
             headers = result.get('values', [[]])[0] if result.get('values') else []
             
             ai_summary_col = -1
+            ai_keywords_col = -1
             ai_processed_col = -1
             daily_draft_col = -1
             
@@ -428,6 +490,8 @@ class SheetAnalyzer:
                 header_lower = header.lower()
                 if header_lower == 'ai summary':
                     ai_summary_col = i
+                elif header_lower == 'ai keywords':
+                    ai_keywords_col = i
                 elif header_lower == 'ai processed':
                     ai_processed_col = i
                 elif header_lower == 'daily post draft':
@@ -436,6 +500,7 @@ class SheetAnalyzer:
             # Check if columns need to be added
             needs_update = False
             
+            # Always ensure AI Summary column exists for backward compatibility
             if ai_summary_col == -1:
                 # Add after Content column (assuming it's column F, index 5)
                 new_col_index = len(headers)
@@ -443,10 +508,27 @@ class SheetAnalyzer:
                 ai_summary_col = new_col_index
                 needs_update = True
             
-            # Add AI processed column right after AI Summary if it doesn't exist
-            if ai_processed_col == -1:
+            # Add AI Keywords column if in keywords mode and doesn't exist
+            if self.generation_mode == 'keywords' and ai_keywords_col == -1:
                 # Insert after AI Summary column
                 insert_index = ai_summary_col + 1
+                if insert_index <= len(headers):
+                    headers.insert(insert_index, 'AI Keywords')
+                    ai_keywords_col = insert_index
+                    # Adjust other columns if needed
+                    if ai_processed_col >= insert_index:
+                        ai_processed_col += 1
+                    if daily_draft_col >= insert_index:
+                        daily_draft_col += 1
+                else:
+                    headers.append('AI Keywords')
+                    ai_keywords_col = len(headers) - 1
+                needs_update = True
+            
+            # Add AI processed column if it doesn't exist
+            if ai_processed_col == -1:
+                # Insert after AI Summary/Keywords columns
+                insert_index = max(ai_summary_col, ai_keywords_col) + 1
                 if insert_index <= len(headers):
                     headers.insert(insert_index, 'AI processed')
                     ai_processed_col = insert_index
@@ -482,7 +564,7 @@ class SheetAnalyzer:
                 self.sheets.append_data(all_rows)
                 logger.info("Added missing columns to sheet")
             
-            return ai_summary_col, ai_processed_col, daily_draft_col
+            return ai_summary_col, ai_processed_col, daily_draft_col, ai_keywords_col
             
         except Exception as e:
             logger.error(f"Error ensuring columns exist: {e}")
@@ -598,14 +680,15 @@ class SheetAnalyzer:
     
     # Removed _process_batch method as we're no longer doing batch processing
     
-    def write_summaries(self, all_processed: List[Tuple[int, str]], ai_summary_col: int, ai_processed_col: int):
+    def write_summaries(self, all_processed: List[Tuple[int, str]], ai_summary_col: int, ai_processed_col: int, ai_keywords_col: int = -1):
         """
-        Write AI summaries and AI processed status to the sheet
+        Write AI summaries/keywords and AI processed status to the sheet
         
         Args:
-            all_processed: List of (row_index, ai_summary) tuples for all processed rows
+            all_processed: List of (row_index, ai_analysis) tuples for all processed rows
             ai_summary_col: Column index for AI Summary
             ai_processed_col: Column index for AI processed
+            ai_keywords_col: Column index for AI Keywords (optional, -1 if not present)
         """
         if not all_processed:
             return
@@ -615,25 +698,38 @@ class SheetAnalyzer:
             all_rows = self.sheets.get_sheet_data()
             
             # Ensure we have enough columns in each row
-            max_col = max(ai_summary_col, ai_processed_col)
+            max_col = max(ai_summary_col, ai_processed_col, ai_keywords_col if ai_keywords_col != -1 else 0)
             for row_idx in range(len(all_rows)):
                 while len(all_rows[row_idx]) <= max_col:
                     all_rows[row_idx].append('')
             
-            # Update the AI summary and AI processed columns for each processed row
-            for row_index, ai_summary in all_processed:
+            # Update the appropriate columns for each processed row
+            for row_index, ai_analysis in all_processed:
                 if row_index - 1 < len(all_rows):  # row_index is 1-based
-                    all_rows[row_index - 1][ai_summary_col] = ai_summary
+                    # Write the analysis to the appropriate column
+                    if self.generation_mode == 'keywords' and ai_keywords_col != -1:
+                        # Extract just the keywords (remove "Keywords: " prefix if present)
+                        if ai_analysis.startswith("Keywords: "):
+                            keywords_only = ai_analysis.replace("Keywords: ", "")
+                            all_rows[row_index - 1][ai_keywords_col] = keywords_only
+                        else:
+                            all_rows[row_index - 1][ai_keywords_col] = ai_analysis
+                        # Also write to summary column for backward compatibility
+                        all_rows[row_index - 1][ai_summary_col] = ai_analysis
+                    else:
+                        all_rows[row_index - 1][ai_summary_col] = ai_analysis
+                    
                     all_rows[row_index - 1][ai_processed_col] = "TRUE"
             
             # Clear and rewrite the entire sheet
             self.sheets.clear_sheet(preserve_headers=False)
             self.sheets.append_data(all_rows)
             
-            logger.info(f"Written {len(all_processed)} AI summaries to sheet")
+            mode_text = "keywords" if self.generation_mode == 'keywords' else "summaries"
+            logger.info(f"Written {len(all_processed)} AI {mode_text} to sheet")
                 
         except Exception as e:
-            logger.error(f"Error writing summaries: {e}")
+            logger.error(f"Error writing {self.generation_mode}: {e}")
     
     def generate_and_write_daily_draft(self, summaries: List[ProjectSummary], daily_draft_col: int):
         """
@@ -674,23 +770,24 @@ class SheetAnalyzer:
         """
         Run the complete daily analysis workflow
         """
-        logger.info("Starting daily analysis")
+        logger.info(f"Starting daily analysis in {self.generation_mode} mode")
         
         try:
-            # Ensure columns exist
-            ai_summary_col, ai_processed_col, daily_draft_col = self.ensure_columns_exist()
+            # Ensure columns exist (now returns 4 values)
+            ai_summary_col, ai_processed_col, daily_draft_col, ai_keywords_col = self.ensure_columns_exist()
             
             # Analyze all rows
             summaries, all_processed_rows = self.analyze_all_rows()
             
             if all_processed_rows:
-                # Write all AI summaries (including "Not new project related")
-                self.write_summaries(all_processed_rows, ai_summary_col, ai_processed_col)
+                # Write all AI summaries/keywords (including "Not new project related")
+                self.write_summaries(all_processed_rows, ai_summary_col, ai_processed_col, ai_keywords_col)
                 
                 # Generate and write daily draft only if there are actual projects
                 if summaries:
                     self.generate_and_write_daily_draft(summaries, daily_draft_col)
-                    logger.info(f"Daily analysis complete: {len(all_processed_rows)} rows processed, {len(summaries)} new projects found")
+                    mode_text = "keywords" if self.generation_mode == 'keywords' else "summaries"
+                    logger.info(f"Daily analysis complete ({mode_text} mode): {len(all_processed_rows)} rows processed, {len(summaries)} new projects found")
                 else:
                     logger.info(f"Daily analysis complete: {len(all_processed_rows)} rows processed, no new projects found")
             else:

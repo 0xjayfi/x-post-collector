@@ -90,6 +90,8 @@ def build_config_dict() -> dict:
         # Gemini AI
         'GEMINI_API_KEY': config.GEMINI_API_KEY,
         'GEMINI_MODEL': config.GEMINI_MODEL,
+        'GEMINI_DAILY_LIMIT': config.GEMINI_DAILY_LIMIT,
+        'GEMINI_GENERATION_MODE': config.GEMINI_GENERATION_MODE,
         
         # Publishing
         'PUBLISHER_TYPE': config.PUBLISHER_TYPE,
